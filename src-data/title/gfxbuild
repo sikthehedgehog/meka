@@ -1,0 +1,17 @@
+output "src-data/title/title.4bpp"
+
+layout tilemap
+input "src-data/title/background.png"
+tiles 0 0 8 8
+
+layout sprite
+input "src-data/title/cursor.png"
+tiles 0 0 1 3
+tiles 1 0 4 3
+tiles 5 0 1 3
+
+layout tilemap
+output "src-data/title/logo.4bpp"
+output2 "src-data/title/logo.map"
+input "src-data/title/logo.png"
+map 0 0 40 28

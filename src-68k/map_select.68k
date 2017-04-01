@@ -1,0 +1,245 @@
+;****************************************************************************
+; MapSelect
+; Main loop for the map select screen.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+MapSelect:
+    jsr     (ResetVideo).w              ; Reset everything
+    clr.b   (Joy1Press)
+    clr.b   (Joy2Press)
+    
+    move.w  #$9011, ($C00004)           ; Use 64×64 maps
+    
+    lea     (GfxIngame), a6             ; Load graphics
+    lea     (LocalRAM), a5
+    jsr     (DecompressSLZ).w
+    lea     (LocalRAM), a6
+    moveq   #1, d7
+    move.w  #VramSizeIngame-1, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    moveq   #0, d7                      ; Load palettes
+    lea     (PalIngame1), a6
+    jsr     (SetPalette).w
+    moveq   #1, d7
+    lea     (PalIngame2), a6
+    jsr     (SetPalette).w
+    moveq   #2, d7
+    lea     (PalIngame3), a6
+    jsr     (SetPalette).w
+    moveq   #3, d7
+    lea     (PalIngameBG), a6
+    jsr     (SetPalette).w
+    
+    bsr     SetMapAddr                  ; Get default map address
+    
+    clr.w   (SlidePos)                  ; Default position of tilemap
+    clr.w   (SlideSpeed)                ; Tilemap is not moving yet
+    clr.w   (MapPos)                    ; Where to draw default map
+    
+    bsr     DrawMapSelectBG             ; Draw background
+    bsr     DrawMap                     ; Draw default map
+    
+    moveq   #BGM_MAPSELECT, d7          ; Play music
+    jsr     (PlayBGM).w
+
+;----------------------------------------------------------------------------
+
+@MainLoop:
+    move.w  (SlidePos), d6              ; Update scroll position
+    move.l  #$40000010, ($C00004)
+    move.w  d6, ($C00000)
+    neg.w   d6
+    move.l  #$78000003, ($C00004)
+    move.w  d6, ($C00000)
+    
+    move.w  (SlideSpeed), d7            ; Moving?
+    beq.s   @NoMotion
+    move.w  (SlidePos), d6
+    add.w   d7, d6
+    move.w  d6, (SlidePos)
+    and.w   #$FF, d6
+    bne.s   @InputDone
+    clr.w   (SlideSpeed)
+    bra.s   @InputDone
+@NoMotion:
+    
+    move.b  (Joy1Press), d0             ; Get user input
+    btst.l  #0, d0                      ; Previous map?
+    bne     @PrevMap
+    btst.l  #2, d0
+    bne     @PrevMap
+    btst.l  #1, d0                      ; Next map?
+    bne     @NextMap
+    btst.l  #3, d0
+    bne     @NextMap
+    btst.l  #7, d0                      ; Start playing?
+    bne     @StartGame
+@InputDone:
+    
+    bsr     UpdateMapAnim               ; Update animations
+    
+    jsr     (ClearSprites).w            ; Draw all sprites
+    bsr     DrawMapSelect
+    bsr     DrawSelectArrows
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @MainLoop
+
+;----------------------------------------------------------------------------
+
+@PrevMap:
+    move.b  (CurrMap), d7               ; Select previous map
+    bne.s   @NoBackToLast
+    moveq   #NUM_MAPS, d7
+@NoBackToLast:
+    subq.b  #1, d7
+    move.b  d7, (CurrMap)
+    bsr     SetMapAddr
+    
+    move.w  #-8, (SlideSpeed)           ; Start motion backwards
+    
+    move.w  (MapPos), d7                ; Draw previous map
+    eor.w   #$20, d7
+    move.w  d7, (MapPos)
+    bsr     DrawMap
+    
+    moveq   #SFX_BEEP, d7               ; Bleep
+    jsr     (PlaySFX).w
+    bra     @InputDone                  ; Keep going
+
+;----------------------------------------------------------------------------
+
+@NextMap:
+    move.b  (CurrMap), d7               ; Select next map
+    addq.b  #1, d7
+    cmp.b   #NUM_MAPS, d7
+    blo.s   @NoBackToFirst
+    moveq   #0, d7
+@NoBackToFirst:
+    move.b  d7, (CurrMap)
+    bsr     SetMapAddr
+    
+    move.w  #8, (SlideSpeed)            ; Start motion forwards
+    
+    move.w  (MapPos), d7                ; Draw next map
+    eor.w   #$20, d7
+    move.w  d7, (MapPos)
+    bsr     DrawMap
+    
+    moveq   #SFX_BEEP, d7               ; Bleep
+    jsr     (PlaySFX).w
+    bra     @InputDone                  ; Keep going
+
+;----------------------------------------------------------------------------
+
+@StartGame:
+    moveq   #SFX_LONGBEEP, d7           ; Acknowledge
+    jsr     (PlaySFX).w
+    
+    bra     Ingame                      ; Start playing!
+
+;****************************************************************************
+; DrawMapSelectBG
+; Draws the background of the map select.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawMapSelectBG:
+    lea     ($C00000), a6               ; VDP port address
+    
+    move.w  #$6010+VramTiles, d0        ; Tiles used for painting
+    move.w  #$6011+VramTiles, d1
+    move.w  #$6012+VramTiles, d2
+    move.w  #$6013+VramTiles, d3
+    
+    move.l  #$40000003, 4(a6)           ; Go through all tilemap
+    moveq   #$40/4-1, d5
+@YLoop2:
+    moveq   #4-1, d6
+@YLoop1:
+    moveq   #$40/4-1, d7
+@XLoop:
+    
+    move.w  d0, (a6)                    ; Draw line
+    move.w  d1, (a6)
+    move.w  d2, (a6)
+    move.w  d3, (a6)
+    dbf     d7, @XLoop
+    
+    addq.w  #4, d0                      ; Go for next line
+    addq.w  #4, d1
+    addq.w  #4, d2
+    addq.w  #4, d3
+    dbf     d6, @YLoop1
+    
+    sub.w   #$10, d0                    ; Go for next row of tiles
+    sub.w   #$10, d1
+    sub.w   #$10, d2
+    sub.w   #$10, d3
+    dbf     d5, @YLoop2
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawSelectArrows
+; Draws the arrows in the map select.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawSelectArrows:
+    move.w  (Anim), d4                  ; Determine arrow offset
+    lsr.w   #1, d4
+    and.w   #$08, d4
+    
+    move.w  #$90, d0                    ; Draw up arrow
+    move.w  #$10, d1
+    add.w   d4, d1
+    move.w  #$8000+VramSelectUp, d2
+    moveq   #%1111, d3
+    jsr     (AddSprite).w
+    
+    move.w  #$90, d0                    ; Draw down arrow
+    move.w  #$B0, d1
+    sub.w   d4, d1
+    move.w  #$8000+VramSelectDown, d2
+    moveq   #%1111, d3
+    jsr     (AddSprite).w
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawMapSelect
+; Draws the "MAP SELECT" text.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawMapSelect:
+    lea     @Table(pc), a0              ; Just draw "MAP SELECT"
+    moveq   #@TableSize-1, d4
+@Loop:
+    move.w  (a0)+, d0
+    move.w  (a0)+, d1
+    move.w  (a0)+, d2
+    move.w  (a0)+, d3
+    jsr     (AddSprite).w
+    dbf     d4, @Loop
+   
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Table:
+    dc.w    $88, $70, $E000+VramMapSelect, %1101
+    dc.w    $A8, $70, $E008+VramMapSelect, %0101
+    dc.w    $70, $60, $E00C+VramMapSelect, %1101
+    dc.w    $90, $60, $E014+VramMapSelect, %1101
+    dc.w    $B0, $60, $E01C+VramMapSelect, %1101
+
+@TableSize: equ (*-@Table)/8

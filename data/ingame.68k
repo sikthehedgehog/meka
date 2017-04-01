@@ -1,0 +1,64 @@
+;****************************************************************************
+; GfxIngame
+; Graphics data for use in-game
+;****************************************************************************
+
+GfxIngame:
+    incbin  "data/ingame/ingame.slz"
+    even
+
+;****************************************************************************
+; Graphics for the map tiles (which are animated)
+;****************************************************************************
+
+GfxTileFloor:
+    incbin  "data/ingame/tile_floor.uftc"
+GfxTileEmpty:
+    incbin  "data/ingame/tile_empty.uftc"
+
+;****************************************************************************
+; PlayerTable
+; Look-up table used to determine the sprite to use for a player depending
+; on their current angle.
+;****************************************************************************
+
+PlayerTable:
+    dc.w    $0000+VramPlayer
+    dc.w    $0010+VramPlayer
+    dc.w    $0020+VramPlayer
+    dc.w    $0030+VramPlayer
+    dc.w    $0040+VramPlayer
+    dc.w    $0830+VramPlayer
+    dc.w    $0820+VramPlayer
+    dc.w    $0810+VramPlayer
+    dc.w    $0800+VramPlayer
+    dc.w    $1810+VramPlayer
+    dc.w    $1820+VramPlayer
+    dc.w    $1830+VramPlayer
+    dc.w    $1040+VramPlayer
+    dc.w    $1030+VramPlayer
+    dc.w    $1020+VramPlayer
+    dc.w    $1010+VramPlayer
+
+;****************************************************************************
+; BlobTable
+; Look-up table used animate the blobs.
+;****************************************************************************
+
+BlobTable:
+    dc.w    $0000+VramBlob
+    dc.w    $0010+VramBlob
+    dc.w    $0010+VramBlob
+    dc.w    $0020+VramBlob
+    dc.w    $0030+VramBlob
+    dc.w    $0040+VramBlob
+    dc.w    $0040+VramBlob
+    dc.w    $0050+VramBlob
+    dc.w    $0050+VramBlob
+    dc.w    $0040+VramBlob
+    dc.w    $0040+VramBlob
+    dc.w    $0030+VramBlob
+    dc.w    $0020+VramBlob
+    dc.w    $0010+VramBlob
+    dc.w    $0010+VramBlob
+    dc.w    $0000+VramBlob

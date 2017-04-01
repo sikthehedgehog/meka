@@ -1,0 +1,123 @@
+;****************************************************************************
+; Ingame
+; Main loop for the in-game mode.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+Ingame:
+    clr.b   (Joy1Press)                 ; Avoid surprise presses
+    clr.b   (Joy2Press)
+    
+    bsr     InitPlayers                 ; Initialize stuff
+    bsr     InitEnemies
+    bsr     InitItem
+    bsr     InitAutoScore
+    bsr     InitQuake
+    clr.b   (Paused)
+    
+    moveq   #BGM_INGAME, d7             ; Play music
+    jsr     (PlayBGM).w
+
+;----------------------------------------------------------------------------
+
+@MainLoop:
+    move.w  (QuakeOffset), d7           ; Show off quake if ongoing
+    add.w   (SlidePos), d7
+    move.l  #$40000010, ($C00004)
+    move.w  d7, ($C00000)
+    
+    tst.b   (P1Data+PLAYER_EXPLODING)   ; Game over?
+    bpl     @NoGameOver
+    tst.b   (P2Data+PLAYER_EXPLODING)
+    bmi     @GameOver
+@NoGameOver:
+    
+    move.b  (Joy1Press), d0             ; Toggle pausing?
+    or.b    (Joy2Press), d0
+    btst.l  #7, d0
+    beq.s   @NoPauseToggle
+    moveq   #SFX_LONGBEEP, d7
+    jsr     (PlaySFX).w
+    not.b   (Paused)
+;    beq.s   @ResumeSound
+;@StopSound:
+;    jsr     (StopAllSound).w
+;    bra.s   @NoPauseToggle
+;@ResumeSound:
+;    jsr     (ResumeBGM).w
+@NoPauseToggle:
+    
+    tst.b   (Paused)                    ; Is the game paused?
+    bne.s   @PausedLogic
+    
+    bsr     RunPlayers                  ; Update game logic
+    bsr     UpdateItem
+    bsr     DoPlayerPhysics
+    bsr     DoEnemyPhysics
+    bsr     UpdateGrapples
+    bsr     ScanGrapples
+    bsr     CheckPlayersItem
+    bsr     CheckEnemiesHurt
+    bsr     CheckPlayersHurt
+    bsr     EnemySpawner
+    bsr     UpdateAutoScore
+    
+    bsr     UpdateEnemyAnim             ; Update animations
+    bsr     UpdateMapAnim
+    bsr     UpdateQuake
+    bra.s   @NotPaused
+    
+@PausedLogic:
+    subq.w  #1, (Anim)                  ; Ensure animations stay in place
+                                          ; while the game is paused
+@NotPaused:
+    jsr     (ClearSprites).w            ; Draw all sprites
+    bsr     DrawPause
+    bsr     DrawScore1P
+    bsr     DrawScore2P
+    bsr     DrawItem
+    bsr     DrawEnemies
+    bsr     DrawPlayers
+    bsr     DrawGrapples
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @MainLoop
+
+;----------------------------------------------------------------------------
+
+@GameOver:
+    bra     GameOver
+
+;****************************************************************************
+; DrawPause
+; Draws "PAUSE" when paused.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawPause:
+    tst.b   (Paused)                    ; Is the game paused?
+    beq.s   @NotPaused
+    
+    lea     @Table(pc), a0              ; Draw "PAUSE"
+    moveq   #@TableSize-1, d4
+@Loop:
+    move.w  (a0)+, d0
+    move.w  (a0)+, d1
+    move.w  (a0)+, d2
+    move.w  (a0)+, d3
+    jsr     (AddSprite).w
+    dbf     d4, @Loop
+    
+@NotPaused:
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Table:
+    dc.w    $78, $68, $E000+VramPause, %1101
+    dc.w    $98, $68, $E008+VramPause, %1101
+    dc.w    $B8, $68, $E010+VramPause, %0101
+
+@TableSize: equ (*-@Table)/8

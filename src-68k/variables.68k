@@ -1,0 +1,98 @@
+;****************************************************************************
+; Global variables
+;****************************************************************************
+
+                    rsset $FF0000
+
+Joy1Hold:           rs.b 1          ; Buttons held down by player 1
+Joy1Press:          rs.b 1          ; Buttons just pressed by player 1
+Joy2Hold:           rs.b 1          ; Buttons held down by player 2
+Joy2Press:          rs.b 1          ; Buttons just pressed by player 2
+
+RandSeed:           rs.w 1          ; Seed for RNG
+
+VBlankFlag:         rs.b 1          ; Flag set when vblank starts
+NumSprites:         rs.b 1          ; Number of sprites in the table
+SpriteBuf:          rs.w 4*80       ; Sprite table buffer
+PaletteBuf:         rs.w 4*16       ; Palette buffer
+DMABufEnd:          rs.l 1          ; Where data in DMA buffer ends
+DMABuf:             rs.w $100       ; DMA command buffer
+
+BGMToPlay:          rs.b 1          ; ID of BGM to play next
+SFXToPlay:          rs.b 1          ; ID of SFX to play next
+CurrSFX:            rs.b 1          ; ID of SFX currently playing
+                    rs.b 1
+
+Anim:               rs.w 1          ; Global animaton counter
+Subpixel:           rs.w 1          ; Offset for faking subpixel accuracy
+
+NumPlayers:         rs.b 1          ; How many players?
+CurrMap:            rs.b 1          ; Currently selected map
+HiscoreTable:       rs.l 10         ; List of high score entries
+HiscoreNames:       rs.l 10         ; List of high score names
+
+LocalRAM:           rs.b 0          ; Where local variables start
+
+;****************************************************************************
+; Local variables used in-game
+;****************************************************************************
+
+                    rsset LocalRAM
+
+P1Data:     rs.b PLAYER_SIZE        ; Player 1 data
+P2Data:     rs.b PLAYER_SIZE        ; Player 2 data
+EnemyData:  rs.b MAX_ENEMIES*$40    ; Enemy data
+
+Score1P:            rs.l 1          ; Player 1 score
+Score2P:            rs.l 1          ; Player 2 score
+AutoScore:          rs.w 1          ; Timer used for incrementing score
+
+SpawnCount:         rs.l 1          ; How many enemies were spawned
+SuperSpawn:         rs.w 1          ; Threshold to spawn a superblob
+SpawnTimer:         rs.b 1          ; Time to wait for next enemy spawn
+NextSlot:           rs.b 1          ; Next enemy slot to use
+
+QuakeTimer:         rs.w 1          ; Timer left for the quake
+QuakeOffset:        rs.w 1          ; Offset caused by the quake
+MapAddr:            rs.l 1          ; Pointer to map data
+
+BlobAnim:           rs.w 1          ; Sprite to use for blobs
+SuperblobAnim:      rs.w 1          ; Sprite to use for superblobs
+
+ItemX:              rs.w 1          ; Horizontal coordinate of item
+ItemY:              rs.w 1          ; Vertical coordinate of item
+ItemTimer:          rs.w 1          ; How long before new item comes in
+ItemType:           rs.b 1          ; What kind of item is it?
+
+Paused:             rs.b 1          ; Set when game is paused
+
+TileFloorBuf:       rs.b $20*16     ; Buffer for floor tiles animation
+TileEmptyBuf:       rs.b $20*16     ; Buffer for empty tiles animation
+
+SlidePos:           rs.w 1          ; Scrolling in the map select
+SlideSpeed:         rs.w 1          ; Scrolling speed for above
+MapPos:             rs.w 1          ; Where to draw the map
+
+GameOverPos:        rs.w 1          ; For "GAME OVER" animation
+
+;****************************************************************************
+; Local variables used in the high score table.
+;****************************************************************************
+
+                    rsset LocalRAM
+
+Rank1P:             rs.b 1          ; Rank obtained by player 1
+Rank2P:             rs.b 1          ; Rank obtained by player 2
+EntryPos1P:         rs.b 1          ; Letter being entered by player 1
+EntryPos2P:         rs.b 1          ; Letter being entered by player 2
+
+LocalRAMHiscore:    rs.b 0          ; For decompressing stuff
+
+;****************************************************************************
+; Local variables used in the sound test screen.
+;****************************************************************************
+
+                    rsset LocalRAM
+
+BGMTest:            rs.b 1          ; Selected BGM
+SFXTest:            rs.b 1          ; Selected SFX

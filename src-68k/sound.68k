@@ -1,0 +1,142 @@
+;****************************************************************************
+; InitSound
+; Sets up the sound hardware.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitSound:
+    clr.b   (BGMToPlay)                 ; Reset sound status
+    clr.b   (SFXToPlay)
+    clr.b   (CurrSFX)
+    
+    lea     (InstrumentList), a0        ; Initialize sound engine
+    bsr     Echo_Init
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; UpdateSound
+; Processes sound requests and talks to the sound engine.
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4-a6
+;****************************************************************************
+
+UpdateSound:
+    movem.l d0-d1/a0-a1, -(sp)          ; Save registers
+    
+    moveq   #0, d7                      ; Play a BGM?
+    move.b  (BGMToPlay), d7
+    beq.s   @NoBGM
+    clr.b   (BGMToPlay)
+    cmp.b   #$FF, d7
+    beq.s   @StopBGM
+    cmp.b   #$FE, d7
+    beq.s   @ResumeBGM
+    
+    subq.w  #1, d7
+    lsl.w   #2, d7
+    lea     (BGMList), a0
+    move.l  (a0,d7.w), a0
+    bsr     Echo_PlayBGM
+    bra.s   @Skip
+    
+@StopBGM:
+    bsr     Echo_StopBGM
+    bra.s   @Skip
+@ResumeBGM:
+    bsr     Echo_ResumeBGM
+    bra.s   @Skip
+    
+@NoBGM:
+    moveq   #0, d7                      ; Play a SFX?
+    move.b  (SFXToPlay), d7
+    beq.s   @NoSFX
+    clr.b   (SFXToPlay)
+    cmp.b   #$FF, d7
+    beq.s   @StopSFX
+    
+    subq.w  #1, d7
+    lsl.w   #2, d7
+    lea     (SFXList), a0
+    move.l  (a0,d7.w), a0
+    bsr     Echo_PlaySFX
+    bra.s   @Skip
+    
+@StopSFX:
+    bsr     Echo_StopSFX
+    bra.s   @Skip
+    
+@NoSFX:
+    bsr     Echo_GetStatus              ; Is a SFX still playing?
+    btst.l  #0, d0
+    bne.s   @SFXPlaying
+    clr.b   (CurrSFX)
+@SFXPlaying:
+    
+@Skip:
+    movem.l (sp)+, d0-d1/a0-a1          ; Restore registers
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; PlayBGM
+; Plays a new BGM.
+;----------------------------------------------------------------------------
+; input d7.b ... BGM ID
+;****************************************************************************
+
+PlayBGM:
+    move.b  d7, (BGMToPlay)
+    rts
+
+;****************************************************************************
+; StopBGM
+; Stops playing the BGM.
+;****************************************************************************
+
+StopBGM:
+    move.b  #$FF, (BGMToPlay)
+    rts
+
+;****************************************************************************
+; ResumeBGM
+; Resumes playing the last stopped BGM.
+;****************************************************************************
+
+ResumeBGM:
+    move.b  #$FE, (BGMToPlay)
+    rts
+
+;****************************************************************************
+; PlaySFX
+; Plays a SFX.
+;----------------------------------------------------------------------------
+; input d7.b ... SFX ID
+;****************************************************************************
+
+PlaySFX:
+    cmp.b   (CurrSFX), d7
+    blo.s   @Overriden
+    move.b  d7, (SFXToPlay)
+    move.b  d7, (CurrSFX)
+@Overriden:
+    rts
+
+;****************************************************************************
+; StopSFX
+; Stops playing all SFXs.
+;****************************************************************************
+
+StopSFX:
+    move.b  #$FF, (SFXToPlay)
+    rts
+
+;****************************************************************************
+; StopAllSound
+; Stops all BGM and SFX.
+;****************************************************************************
+
+StopAllSound:
+    move.b  #$FF, (BGMToPlay)
+    move.b  #$FF, (SFXToPlay)
+    rts

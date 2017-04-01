@@ -1,0 +1,172 @@
+;****************************************************************************
+; SoundTest
+; Default loop for the sound test.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+SoundTest:
+    jsr     (StopAllSound).w            ; Reset everything
+    jsr     (ResetVideo).w
+    clr.b   (Joy1Press)
+    
+    lea     (GfxHiscore), a6            ; Load graphics
+    lea     (LocalRAMHiscore), a5
+    jsr     (DecompressSLZ).w
+    lea     (LocalRAMHiscore), a6
+    moveq   #1, d7
+    move.w  #VramSizeHiscore-1, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    move.b  #1, (BGMTest)               ; Default selection
+    move.b  #1, (SFXTest)
+    moveq   #0, d0
+    
+    move.l  #$0EEE0222, (PaletteBuf+$02) ; Set palettes
+    move.l  #$06660222, (PaletteBuf+$22)
+
+;----------------------------------------------------------------------------
+
+@MainLoop:
+    move.b  (Joy1Press), d1             ; Get current input
+    
+    btst.l  #0, d1                      ; Press up/down to toggle BGM/SFX
+    bne     @Toggle
+    btst.l  #1, d1
+    bne     @Toggle
+    btst.l  #2, d1                      ; Press left/right to select BGM/SFX
+    bne     @Prev
+    btst.l  #3, d1
+    bne     @Next
+    btst.l  #7, d1                      ; Press Start to quit
+    bne     @Quit
+    and.b   #$70, d1                    ; Press A/B/C to play
+    bne     @Play
+@Done:
+    
+    move.w  d0, -(sp)                   ; Draw cursor
+    jsr     (ClearSprites).w
+    
+    move.w  d0, d2                      ; Determine palette
+    ror.w   #3, d2
+    
+    moveq   #0, d4                      ; Draw current BGM
+    move.b  (BGMTest), d4
+    moveq   #$20, d0
+    moveq   #$10, d1
+    bsr     @DrawNumber
+    
+    moveq   #0, d4                      ; Draw current SFX
+    move.b  (SFXTest), d4
+    moveq   #$20, d0
+    moveq   #$20, d1
+    and.w   #$2000, d2
+    eor.w   #$2000, d2
+    bsr     @DrawNumber
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    move.w  (sp)+, d0
+    bra.s   @MainLoop
+
+;----------------------------------------------------------------------------
+
+@Toggle:
+    bchg.l  #0, d0
+    bra     @Done
+
+;----------------------------------------------------------------------------
+
+@Prev:
+    tst.w   d0
+    bne.s   @PrevSFX
+
+@PrevBGM:
+    move.b  (BGMTest), d7
+    bne.s   @PrevBGMOK
+    moveq   #NUM_BGM, d7
+@PrevBGMOK:
+    subq.b  #1, d7
+    move.b  d7, (BGMTest)
+    bra     @Done
+
+@PrevSFX:
+    move.b  (SFXTest), d7
+    bne.s   @PrevSFXOK
+    moveq   #NUM_SFX, d7
+@PrevSFXOK:
+    subq.b  #1, d7
+    move.b  d7, (SFXTest)
+    bra     @Done
+
+;----------------------------------------------------------------------------
+
+@Next:
+    tst.w   d0
+    bne.s   @NextSFX
+
+@NextBGM:
+    move.b  (BGMTest), d7
+    addq.b  #1, d7
+    cmp.b   #NUM_BGM, d7
+    bne.s   @NextBGMOK
+    moveq   #0, d7
+@NextBGMOK:
+    move.b  d7, (BGMTest)
+    bra     @Done
+
+@NextSFX:
+    move.b  (SFXTest), d7
+    addq.b  #1, d7
+    cmp.b   #NUM_SFX, d7
+    bne.s   @NextSFXOK
+    moveq   #0, d7
+@NextSFXOK:
+    move.b  d7, (SFXTest)
+    bra     @Done
+
+;----------------------------------------------------------------------------
+
+@Play:
+    tst.w   d0
+    bne.s   @PlaySFX
+
+@PlayBGM:
+    move.b  (BGMTest), d7
+    jsr     (PlayBGM).w
+    bra     @Done
+
+@PlaySFX:
+    clr.b   (CurrSFX)
+    move.b  (SFXTest), d7
+    jsr     (PlaySFX).w
+    bra     @Done
+
+;----------------------------------------------------------------------------
+
+@Quit:
+    jsr     (DisableDisplay).w
+    move.l  ($0000).w, sp
+    bra     TitleScreen
+
+;----------------------------------------------------------------------------
+
+@DrawNumber:
+    divu.w  #10, d4                     ; Figure out sprites to use
+    move.w  d4, d5
+    swap    d4
+    lsl.w   #2, d4
+    lsl.w   #2, d5
+    add.w   #VramHiNumbers, d4
+    add.w   #VramHiNumbers, d5
+    add.w   d2, d4
+    add.w   d2, d5
+    
+    move.w  d5, d2                      ; Draw digits
+    moveq   #%0101, d3
+    jsr     (AddSprite).w
+    add.w   #$10, d0
+    move.w  d4, d2
+    jsr     (AddSprite).w
+    
+    rts                                 ; End of subroutine

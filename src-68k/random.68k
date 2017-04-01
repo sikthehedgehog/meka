@@ -1,0 +1,45 @@
+;****************************************************************************
+; InitRand
+; Initializes the RNG.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitRand:
+    add.w   ($C00008), d7               ; Involve HV counter
+    add.w   (RandSeed), d7              ; Old seed because why not?
+    
+    lea     ($FF0246), a6               ; Add garbage from RAM
+    lea     ($FF0024), a5
+    moveq   #$40-1, d6
+@Loop:
+    add.w   (a6), d7
+    add.w   (a5), d7
+    lea     $400(a6), a6
+    lea     $400(a5), a5
+    dbf     d6, @Loop
+    
+    add.w   ($C00008), d7               ; For good measure
+    move.w  d7, (RandSeed)              ; Store new seed
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; Rand
+; Generates a random 16-bit number.
+;----------------------------------------------------------------------------
+; output d7.w ... Random number
+;****************************************************************************
+
+Rand:
+    move.w  (RandSeed), d7
+    add.w   ($C00008), d7
+    rol.w   #5, d7
+    eor.w   #$1234, d7
+    add.w   ($C00008), d7
+    rol.w   #2, d7
+    eor.w   #$5678, d7
+    add.w   ($C00008), d7
+    eor.w   #$9ABC, d7
+    move.w  d7, (RandSeed)
+    rts

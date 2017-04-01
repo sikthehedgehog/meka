@@ -1,0 +1,166 @@
+output "src-data/ingame/ingame.4bpp"
+
+layout sprite
+input "src-data/ingame/player_1.png"
+tiles 0 0 4 4
+input "src-data/ingame/player_2.png"
+tiles 0 0 4 4
+input "src-data/ingame/player_3.png"
+tiles 0 0 4 4
+input "src-data/ingame/player_4.png"
+tiles 0 0 4 4
+input "src-data/ingame/player_5.png"
+tiles 0 0 4 4
+
+layout sprite
+input "src-data/ingame/grapple.png"
+tiles 0 0 2 2
+
+layout sprite
+input "src-data/ingame/sparkle_1.png"
+tiles 0 0 2 2
+input "src-data/ingame/sparkle_2.png"
+tiles 0 0 2 2
+
+layout sprite
+input "src-data/ingame/shield.png"
+tiles 0 0 4 4
+tiles 4 0 1 4
+tiles 0 4 4 1
+tiles 4 4 1 1
+
+layout sprite
+input "src-data/ingame/item_shield.png"
+tiles 0 0 3 3
+input "src-data/ingame/item_bomb.png"
+tiles 0 0 3 3
+
+layout sprite
+input "src-data/ingame/blob_1.png"
+tiles 0 0 4 4
+input "src-data/ingame/blob_2.png"
+tiles 0 0 4 4
+input "src-data/ingame/blob_3.png"
+tiles 0 0 4 4
+input "src-data/ingame/blob_4.png"
+tiles 0 0 4 4
+input "src-data/ingame/blob_5.png"
+tiles 0 0 4 4
+input "src-data/ingame/blob_6.png"
+tiles 0 0 4 4
+
+layout sprite
+input "src-data/ingame/explosion_1.png"
+tiles 0 0 4 4
+input "src-data/ingame/explosion_2.png"
+tiles 0 0 4 4
+input "src-data/ingame/explosion_3.png"
+tiles 0 0 4 4
+input "src-data/ingame/explosion_4.png"
+tiles 0 0 4 4
+
+layout sprite
+input "src-data/ingame/numbers.png"
+tiles 0 0 20 2
+
+layout sprite
+input "src-data/ingame/pause.png"
+tiles 0 0 10 2
+
+layout sprite
+input "src-data/map_select/up.png"
+tiles 0 0 4 4
+input "src-data/map_select/down.png"
+tiles 0 0 4 4
+
+layout sprite
+input "src-data/map_select/map_select.png"
+tiles 0 0 6 2
+tiles 0 2 12 2
+
+layout sprite
+input "src-data/game_over/game_over.png"
+tiles 0 2 2 2
+tiles 6 0 2 2
+tiles 2 2 2 2
+tiles 4 0 2 2
+tiles 4 2 2 2
+tiles 2 0 2 2
+tiles 6 2 2 2
+tiles 0 0 2 2
+
+layout sprite
+input "src-data/game_over/player.png"
+tiles 0 0 12 2
+
+layout tilemap
+output "src-data/ingame/tile_floor.4bpp"
+input "src-data/ingame/tile_floor.png"
+tiles 0 0 4 4
+tiles 4 0 4 4
+tiles 8 0 4 4
+tiles 12 0 4 4
+tiles 16 0 4 4
+tiles 20 0 4 4
+tiles 24 0 4 4
+tiles 28 0 4 4
+tiles 0 4 4 4
+tiles 4 4 4 4
+tiles 8 4 4 4
+tiles 12 4 4 4
+tiles 16 4 4 4
+tiles 20 4 4 4
+tiles 24 4 4 4
+tiles 28 4 4 4
+tiles 0 8 4 4
+tiles 4 8 4 4
+tiles 8 8 4 4
+tiles 12 8 4 4
+tiles 16 8 4 4
+tiles 20 8 4 4
+tiles 24 8 4 4
+tiles 28 8 4 4
+tiles 0 12 4 4
+tiles 4 12 4 4
+tiles 8 12 4 4
+tiles 12 12 4 4
+tiles 16 12 4 4
+tiles 20 12 4 4
+tiles 24 12 4 4
+tiles 28 12 4 4
+
+layout tilemap
+output "src-data/ingame/tile_empty.4bpp"
+input "src-data/ingame/tile_empty.png"
+tiles 0 0 4 4
+tiles 4 0 4 4
+tiles 8 0 4 4
+tiles 12 0 4 4
+tiles 16 0 4 4
+tiles 20 0 4 4
+tiles 24 0 4 4
+tiles 28 0 4 4
+tiles 0 4 4 4
+tiles 4 4 4 4
+tiles 8 4 4 4
+tiles 12 4 4 4
+tiles 16 4 4 4
+tiles 20 4 4 4
+tiles 24 4 4 4
+tiles 28 4 4 4
+tiles 0 8 4 4
+tiles 4 8 4 4
+tiles 8 8 4 4
+tiles 12 8 4 4
+tiles 16 8 4 4
+tiles 20 8 4 4
+tiles 24 8 4 4
+tiles 28 8 4 4
+tiles 0 12 4 4
+tiles 4 12 4 4
+tiles 8 12 4 4
+tiles 12 12 4 4
+tiles 16 12 4 4
+tiles 20 12 4 4
+tiles 24 12 4 4
+tiles 28 12 4 4

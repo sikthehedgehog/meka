@@ -1,0 +1,12 @@
+Z t128
+
+!a l16cr&rccrecrccrcrer
+!b l16ccrccrccrccrcrer
+
+A @1o3r128v15
+B @1o4r128v11
+Z r128
+
+A !a!a!a!b!a!a!a!b
+B r1r1r1r1!a!a!a!b
+Z L

@@ -1,0 +1,153 @@
+AUTOSCORE_RATE:     equ 10          ; Every how often to give free points
+
+SCORE_AUTO:         equ $1          ; How much you get for staying alive
+SCORE_CATCH:        equ $10         ; How much you get for catching an enemy
+SCORE_KILL:         equ $20         ; How much you get for killing an enemy
+SCORE_ITEM:         equ $50         ; How much you get for getting an item
+
+;****************************************************************************
+; InitAutoScore
+; Initializes the autoscoring timer.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitAutoScore:
+    move.w  #AUTOSCORE_RATE, (AutoScore)
+    rts
+
+;****************************************************************************
+; UpdateAutoScore
+; Automatically gives points to players for surviving.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+UpdateAutoScore:
+    subq.w  #1, (AutoScore)             ; Waiting?
+    beq.s   @Update
+    rts
+@Update:
+    
+    tst.b   (P1Data+PLAYER_EXPLODING)   ; Increment player 1's score
+    bne.s   @NoPlayer1
+    move.l  #SCORE_AUTO, d7
+    moveq   #0, d6
+    bsr     AddScore
+@NoPlayer1:
+    
+    tst.b   (P2Data+PLAYER_EXPLODING)   ; Increment player 2's score
+    bne.s   @NoPlayer2
+    move.l  #SCORE_AUTO, d7
+    moveq   #1, d6
+    bsr     AddScore
+@NoPlayer2:
+    
+    move.w  #AUTOSCORE_RATE, (AutoScore); Start wait again
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; AddScore
+; Adds score to a player.
+;----------------------------------------------------------------------------
+; input d7.l ... How much to add (in BCD)
+; input d6.b ... Which player (0 or 1)
+;****************************************************************************
+
+AddScore:
+    and.w   #$FF, d6                    ; Whose score to affect?
+    lsl.w   #2, d6
+    lea     (Score1P), a6
+    lea     (a6,d6.w), a6
+    
+    move.l  (a6), d6                    ; Add both scores
+    and.b   #$00, ccr
+    abcd.b  d7, d6
+    ror.l   #8, d7
+    ror.l   #8, d6
+    abcd.b  d7, d6
+    ror.l   #8, d7
+    ror.l   #8, d6
+    abcd.b  d7, d6
+    
+    bcc.s   @NoOverflow                 ; Overflowed?
+    move.l  #$99990099, d6
+@NoOverflow:
+    
+    swap    d6                          ; Store new score
+    move.l  d6, (a6)
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawScore1P
+; Draws the player 1 score.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawScore1P:
+    move.l  (Score1P), d4               ; Get current score
+    
+    moveq   #16, d0                     ; Where to start drawing
+    moveq   #8, d1
+    moveq   #%0101, d3
+    
+    moveq   #8-1, d5                    ; Skip leading zeroes
+@ZeroLoop:
+    rol.l   #4, d4
+    move.b  d4, d7
+    and.w   #$0F, d7
+    bne.s   @ZeroEnd
+    dbf     d5, @ZeroLoop
+    bra.s   @NoNumbers
+@ZeroEnd:
+    
+@DigitLoop:                             ; Start drawing the digits
+    move.w  d4, d2
+    and.w   #$0F, d2
+    lsl.w   #2, d2
+    add.w   #$6000+VramNumbers, d2
+    jsr     (AddSprite).w
+    rol.l   #4, d4
+    add.w   #$10, d0
+    dbf     d5, @DigitLoop
+    
+@NoNumbers:
+    move.w  #$6000+VramNumbers, d2      ; Add an extra zero
+    jsr     (AddSprite).w
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawScore2P
+; Draws the player 2 score.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawScore2P:
+    cmpi.b  #2, (NumPlayers)            ; Only show the 2P score when playing
+    beq.s   @Player2OK                    ; with two players
+    rts
+    
+@Player2OK:
+    move.w  #288, d0                    ; Draw extra zero
+    moveq   #8, d1
+    move.w  #$6000+VramNumbers, d2
+    moveq   #%0101, d3
+    jsr     (AddSprite).w
+    
+    move.l  (Score2P), d4               ; Get score
+    beq.s   @NoNumbers
+    
+@Loop:                                  ; Draw all digits
+    sub.w   #$10, d0
+    move.w  d4, d2
+    and.w   #$0F, d2
+    lsl.w   #2, d2
+    add.w   #$6000+VramNumbers, d2
+    jsr     (AddSprite).w
+    lsr.l   #4, d4
+    bne.s   @Loop
+    
+@NoNumbers:
+    rts                                 ; End of subroutine

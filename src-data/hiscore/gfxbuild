@@ -1,0 +1,17 @@
+output "src-data/hiscore/hiscore.4bpp"
+
+layout sprite
+input "src-data/hiscore/numbers.png"
+tiles 0 0 20 2
+
+layout sprite
+input "src-data/hiscore/letters.png"
+tiles 99 99 2 2
+tiles 0 0 18 2
+tiles 0 2 18 2
+tiles 0 4 18 2
+
+output "src-data/hiscore/background.4bpp"
+output2 "src-data/hiscore/background.map"
+input "src-data/hiscore/background.png"
+map 0 0 40 28

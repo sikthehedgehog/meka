@@ -1,0 +1,462 @@
+;****************************************************************************
+; Some stuff affecting the engine
+;****************************************************************************
+
+MAX_ENEMIES:        equ $40     ; Maximum number of enemies on screen
+
+;****************************************************************************
+; What's in an enemy
+;****************************************************************************
+
+                    rsreset
+
+ENEMY_TYPE:         rs.b 1      ; What kind of enemy is it?
+ENEMY_STATE:        rs.b 1      ; Current state
+ENEMY_X:            rs.w 1      ; Horizontal position
+ENEMY_Y:            rs.w 1      ; Vertical position
+ENEMY_XSPEED:       rs.w 1      ; Horizontal speed
+ENEMY_YSPEED:       rs.w 1      ; Vertical speed
+ENEMY_TIMER:        rs.w 1      ; Used for timing stuff
+ENEMY_ID:           rs.b 1      ; Player ID when tossed
+
+                    rs.b 3      ; Padding
+
+;****************************************************************************
+; Possible enemy types
+;****************************************************************************
+
+                    rsreset
+
+                    rs.b 1      ; (free slot)
+ETYPE_BLOB:         rs.b 1      ; Blue blob (slow)
+ETYPE_SUPERBLOB:    rs.b 1      ; Red blob (fast)
+
+;****************************************************************************
+; Possible states for an enemy
+;****************************************************************************
+
+                    rsreset
+
+ESTATE_NORMAL:      rs.b 1      ; Normal behavior
+ESTATE_CAUGHT:      rs.b 1      ; Caught by a grapple
+ESTATE_TOSSED:      rs.b 1      ; Tossed by a grapple
+ESTATE_EXPLODING:   rs.b 1      ; Exploding
+
+;****************************************************************************
+; InitEnemies
+; Initializes the enemy manager.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitEnemies:
+    move.b  #120, (SpawnTimer)          ; Set up enemy spawner
+    move.w  #$60, (SuperSpawn)
+    clr.l   (SpawnCount)
+    clr.b   (NextSlot)
+    
+    lea     (EnemyData), a0             ; Clear up all slots
+    moveq   #MAX_ENEMIES-1, d7
+@Clear:
+    clr.b   ENEMY_TYPE(a0)
+    clr.b   ENEMY_STATE(a0)
+    lea     $10(a0), a0
+    dbf     d7, @Clear
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DoEnemyPhysics
+; Processes the physics for all enemies.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DoEnemyPhysics:
+    lea     (EnemyData), a0             ; Scan all slots
+    moveq   #MAX_ENEMIES-1, d0
+@Loop:
+    tst.b   ENEMY_TYPE(a0)              ; Even bother?
+    beq.s   @Skip
+    cmpi.b  #ESTATE_CAUGHT, ENEMY_STATE(a0)
+    beq.s   @Skip
+    
+    cmpi.b  #ESTATE_EXPLODING, ENEMY_STATE(a0)  ; Exploding?
+    bne.s   @NotExploding
+    
+    move.w  ENEMY_TIMER(a0), d7         ; Let the explosion continue...
+    addq.w  #1, d7
+    move.w  d7, ENEMY_TIMER(a0)
+    cmp.w   #16, d7
+    blo.s   @StillExploding
+    clr.b   ENEMY_TYPE(a0)
+@StillExploding:
+    bra.s   @Skip
+@NotExploding:
+    
+    move.w  ENEMY_X(a0), d1             ; Current position
+    move.w  ENEMY_Y(a0), d2
+    
+    move.w  ENEMY_XSPEED(a0), d3        ; Apply momentum
+    move.w  ENEMY_YSPEED(a0), d4
+    add.w   (Subpixel), d3
+    add.w   (Subpixel), d4
+    asr.w   #8, d3
+    asr.w   #8, d4
+    add.w   d3, d1
+    add.w   d4, d2
+    
+    cmp.w   #-32, d1                    ; Went outbounds?
+    blt.s   @Gone
+    cmp.w   #352, d1
+    bgt.s   @Gone
+    cmp.w   #-32, d2
+    blt.s   @Gone
+    cmp.w   #256, d2
+    bgt.s   @Gone
+    
+    move.w  d1, ENEMY_X(a0)             ; Store new coordinates
+    move.w  d2, ENEMY_Y(a0)
+    
+@Skip:
+    lea     $10(a0), a0                 ; Do next slot
+    dbf     d0, @Loop
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Gone:
+    clr.b   ENEMY_TYPE(a0)              ; Mark slot as free
+    bra.s   @Skip                       ; Do next slot
+
+;****************************************************************************
+; CheckEnemiesHurt
+; Checks if any enemy got hit.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+CheckEnemiesHurt:
+    lea     (EnemyData), a0             ; Scan all slots
+    moveq   #MAX_ENEMIES-1, d7
+@Loop:
+    tst.b   ENEMY_TYPE(a0)              ; Only check tossed enemies
+    beq.s   @Skip
+    cmpi.b  #ESTATE_TOSSED, ENEMY_STATE(a0)
+    bne.s   @Skip
+    
+    lea     (EnemyData), a1             ; Now scan all slots again...
+    moveq   #MAX_ENEMIES-1, d6
+@SubLoop:
+    tst.b   ENEMY_TYPE(a1)              ; Only look for attacking enemies
+    beq.s   @NoTarget
+    cmpi.b  #ESTATE_NORMAL, ENEMY_STATE(a1)
+    bne.s   @NoTarget
+    
+    move.w  ENEMY_X(a0), d0             ; Get distance between enemies
+    sub.w   ENEMY_X(a1), d0
+    bpl.s   *+4
+    neg.w   d0
+    move.w  ENEMY_Y(a0), d1
+    sub.w   ENEMY_Y(a1), d1
+    bpl.s   *+4
+    neg.w   d1
+    
+    cmp.w   #$20, d0                    ; Do the enemies touch?
+    bgt.s   @NoTarget
+    cmp.w   #$20, d1
+    bgt.s   @NoTarget
+    
+    move.l  #SCORE_KILL, d7             ; Award points!
+    move.b  ENEMY_ID(a0), d6
+    bsr     AddScore
+    
+    ;bsr     KillEnemy                   ; Make both enemies explode
+    move.l  a1, a0
+    bra     KillEnemy
+    
+@NoTarget:
+    lea     $10(a1), a1                 ; Try another enemy
+    dbf     d6, @SubLoop
+    
+@Skip:
+    lea     $10(a0), a0                 ; Try next enemy
+    dbf     d7, @Loop
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; KillEnemy
+; Kills an enemy.
+;----------------------------------------------------------------------------
+; input a0.l ... Pointer to enemy data
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4-a6
+;****************************************************************************
+
+KillEnemy:
+    move.b  #ESTATE_EXPLODING, ENEMY_STATE(a0) ; Start explosion
+    clr.w   ENEMY_TIMER(a0)
+    
+    moveq   #SFX_KILL, d7               ; Kaboom!
+    jsr     (PlaySFX).w
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; KillEmAll
+; Kills all enemies on screen.
+;----------------------------------------------------------------------------
+; input d0.w ... Player to be awarded
+;----------------------------------------------------------------------------
+; breaks: d4-d7, a4-a6
+;****************************************************************************
+
+KillEmAll:
+    move.l  a0, -(sp)                   ; Save register
+    
+    lea     (EnemyData), a0             ; Kill every living enemy
+    moveq   #MAX_ENEMIES-1, d4
+@Loop:
+    tst.b   ENEMY_TYPE(a0)
+    beq.s   @Skip
+    cmpi.b  #ESTATE_NORMAL, ENEMY_STATE(a0)
+    bne.s   @Skip
+    move.l  #SCORE_KILL, d7
+    move.w  d0, d6
+    bsr     AddScore
+    bsr     KillEnemy
+@Skip:
+    lea     $10(a0), a0
+    dbf     d4, @Loop
+    
+    bsr     SetQuake                    ; Set off a quake!
+    moveq   #SFX_KILLALL, d7
+    jsr     (PlaySFX).w
+    
+    move.l  (sp)+, a0                   ; Restore register
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawEnemies
+; Draws all enemies.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawEnemies:
+    lea     (EnemyData), a0             ; Scan all slots
+    moveq   #MAX_ENEMIES-1, d4
+@Loop:
+    moveq   #0, d7                      ; Is there an enemy here?
+    move.b  ENEMY_TYPE(a0), d7
+    beq.s   @Skip
+    
+    move.w  ENEMY_X(a0), d0             ; Get position of sprite's center
+    move.w  ENEMY_Y(a0), d1
+    
+    cmpi.b  #ESTATE_EXPLODING, ENEMY_STATE(a0)  ; Exploding?
+    beq.s   @Exploding
+    
+    subq.w  #1, d7                      ; Determine which sprite to use
+    lsl.w   #2, d7
+    lea     @Table(pc), a6
+    move.l  (a6,d7.w), a6
+    jsr     (a6)
+    
+    jsr     (AddSprite).w               ; Draw sprite
+    
+@Skip:
+    lea     $10(a0), a0                 ; Do next slot
+    dbf     d4, @Loop
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Exploding:
+    sub.w   #$10, d0                    ; Apply offset
+    sub.w   #$10, d1
+    
+    move.w  ENEMY_TIMER(a0), d2         ; Determine sprite to show
+    lsr.w   #2, d2
+    lsl.w   #4, d2
+    add.w   #VramExplosion, d2
+    
+    moveq   #%1111, d3                  ; Draw explosion
+    jsr     (AddSprite).w
+    bra.s   @Skip
+
+;----------------------------------------------------------------------------
+
+@Table:
+    dc.l    @Blob                       ; ETYPE_BLOB
+    dc.l    @SuperBlob                  ; ETYPE_SUPERBLOB
+
+@Blob:
+    sub.w   #$10, d0
+    sub.w   #$10, d1
+    move.w  (BlobAnim), d2
+    moveq   #%1111, d3
+    rts
+
+@SuperBlob:
+    sub.w   #$10, d0
+    sub.w   #$10, d1
+    move.w  (SuperblobAnim), d2
+    moveq   #%1111, d3
+    rts
+
+;****************************************************************************
+; UpdateEnemyAnim
+; Updates the animations for enemies.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+UpdateEnemyAnim:
+    move.w  (Anim), d7                  ; Animation for blobs
+    and.w   #$0F<<1, d7
+    lea     (BlobTable), a6
+    move.w  (a6,d7.w), (BlobAnim)
+    
+    move.w  (Anim), d7                  ; Animation for superblobs
+    lsl.w   #1, d7
+    and.w   #$0F<<1, d7
+    lea     (BlobTable), a6
+    move.w  (a6,d7.w), d7
+    add.w   #$2000, d7
+    move.w  d7, (SuperblobAnim)
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; EnemySpawner
+; Spawns enemies every so often.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+EnemySpawner:
+    subq.b  #1, (SpawnTimer)            ; Waiting?
+    beq.s   @Spawn
+    rts
+@Spawn:
+    
+    move.l  (SpawnCount), d0            ; Increase spawn counter
+    addq.l  #1, d0
+    move.l  d0, (SpawnCount)
+    
+    move.l  d0, d7                      ; Set up timer for next spawn
+    lsr.l   #1, d7
+    neg.l   d7
+    add.l   #60, d7
+    cmp.l   #15, d7
+    bge.s   @NotTooFast
+    move.l  #15, d7
+@NotTooFast:
+    move.b  d7, (SpawnTimer)
+    
+    lea     (EnemyData), a0             ; Search for a free slot
+    move.b  (NextSlot), d7
+@ScanFree:
+    and.w   #MAX_ENEMIES-1, d7
+    move.w  d7, d6
+    lsl.w   #4, d6
+    tst.b   ENEMY_TYPE(a0,d6.w)
+    beq.s   @FoundFree
+    addq.b  #1, d7
+    bra.s   @ScanFree
+@FoundFree:
+    lea     (a0,d6.w), a0
+    
+    jsr     (Rand).w                    ; Set initial location randomly
+    and.w   #$03<<2, d7
+    lea     @SpawnTable(pc), a6
+    move.l  (a6,d7.w), a6
+    jsr     (a6)
+    
+    move.w  (SuperSpawn), d1            ; Get chances of spawning a superblob
+    cmp.w   #$20, d1
+    bls.s   @NoMoreSuperblobs
+    subq.w  #1, d1
+    move.w  d1, (SuperSpawn)
+@NoMoreSuperblobs:
+    
+    jsr     (Rand).w                    ; What kind of enemy?
+    and.w   #$3F, d7
+    moveq   #ETYPE_BLOB, d6
+    cmp.w   d1, d7
+    blo.s   @SpawnBlob
+    moveq   #ETYPE_SUPERBLOB, d6
+@SpawnBlob:
+    move.b  d6, ENEMY_TYPE(a0)
+    
+    cmp.b   #ETYPE_SUPERBLOB, d6        ; Superblobs are faster
+    bne.s   @NotFaster
+    move.w  ENEMY_XSPEED(a0), d7
+    asr.w   #1, d7
+    add.w   d7, ENEMY_XSPEED(a0)
+    move.w  ENEMY_YSPEED(a0), d7
+    asr.w   #1, d7
+    add.w   d7, ENEMY_YSPEED(a0)
+    move.w  (SpawnTimer), d7            ; Give some more room to breathe...
+    lsr.w   #1, d7
+    add.w   d7, (SpawnTimer)
+@NotFaster:
+    
+    move.b  #ESTATE_NORMAL, ENEMY_STATE(a0) ; Enemy spawns normally
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@SpawnTable:
+    dc.l    @SpawnTop
+    dc.l    @SpawnBottom
+    dc.l    @SpawnLeft
+    dc.l    @SpawnRight
+
+@SpawnTop:
+    bsr.s   @SpawnTopBottom
+    move.w  #$100, ENEMY_YSPEED(a0)
+    move.w  #-32, ENEMY_Y(a0)
+    rts
+
+@SpawnBottom:
+    bsr.s   @SpawnTopBottom
+    move.w  #256, ENEMY_Y(a0)
+    move.w  #-$100, ENEMY_YSPEED(a0)
+    rts
+
+@SpawnTopBottom:
+    jsr     (Rand).w
+    and.w   #$FF, d7
+    add.w   #$20, d7
+    move.w  d7, ENEMY_X(a0)
+    move.w  #0, ENEMY_XSPEED(a0)
+    rts
+
+@SpawnLeft:
+    bsr.s   @SpawnLeftRight
+    move.w  #-32, ENEMY_X(a0)
+    move.w  #$100, ENEMY_XSPEED(a0)
+    rts
+
+@SpawnRight:
+    bsr.s   @SpawnLeftRight
+    move.w  #352, ENEMY_X(a0)
+    move.w  #-$100, ENEMY_XSPEED(a0)
+    rts
+
+@SpawnLeftRight:
+    jsr     (Rand).w
+    and.w   #$7F, d7
+    move.w  d7, d6
+    jsr     (Rand).w
+    and.w   #$1F, d7
+    add.w   d6, d7
+    add.w   #$20, d7
+    move.w  d7, ENEMY_Y(a0)
+    move.w  #0, ENEMY_YSPEED(a0)
+    rts

@@ -1,0 +1,213 @@
+;****************************************************************************
+; TitleScreen
+; Main loop for the title screen.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+TitleScreen:
+    jsr     (ResetVideo).w              ; Reset everything
+    clr.b   (Joy1Press)
+    clr.b   (Joy2Press)
+    clr.w   (Anim)
+    
+    move.w  #$8C89, ($C00004)           ; Turn on S/H
+    
+    lea     (GfxTitle), a6              ; Load most graphics
+    lea     (LocalRAM), a5
+    jsr     (DecompressSLZ).w
+    lea     (LocalRAM), a6
+    moveq   #1, d7
+    move.w  #VramSizeTitle-1, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    lea     (GfxTitleLogo), a6          ; Load title logo
+    lea     (LocalRAM), a5
+    jsr     (DecompressSLZ).w
+    moveq   #TITLELOGO_X, d0
+    moveq   #TITLELOGO_Y, d1
+    moveq   #TITLELOGO_W, d2
+    moveq   #TITLELOGO_H, d3
+    move.w  #$8000+VramTitleLogo, d4
+    lea     (LocalRAM), a6
+    jsr     (DrawPlaneA).w
+    lea     (LocalRAM+TITLELOGO_Z*2), a6
+    move.w  #VramTitleLogo, d7
+    move.w  #$100, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    moveq   #0, d7                      ; Load palettes
+    lea     (PalTitle), a6
+    jsr     (SetPalette).w
+    moveq   #1, d7
+    lea     (PalIngameBG), a6
+    jsr     (SetPalette).w
+    moveq   #3, d7
+    lea     (PalTitle), a6
+    jsr     (SetPalette).w
+    
+    bsr     DrawTitleBG                 ; Draw background
+    jsr     (StopBGM).w                 ; No music
+
+;----------------------------------------------------------------------------
+
+@MainLoop:
+    move.b  (Joy1Hold), d0              ; Hold down A+B+C for debugging
+    and.b   #$70, d0
+    cmp.b   #$70, d0
+    bne.s   @NoDebug
+    move.b  (Joy1Press), d0
+    bsr     @Debug
+@NoDebug:
+    
+    cmpi.w  #600, (Anim)                ; Show the high score table after
+    beq.s   @Hiscore                      ; a while
+    
+    move.w  (Anim), d7                  ; Make the background move
+    lsr.w   #1, d7
+    move.l  #$40020010, ($C00004)
+    move.w  d7, ($C00000)
+    neg.w   d7
+    move.l  #$78020003, ($C00004)
+    move.w  d7, ($C00000)
+    
+    move.b  (Joy1Press), d7             ; Toggle player count?
+    and.b   #$03, d7
+    beq.s   @NoPlayerToggle
+    move.b  (NumPlayers), d7
+    eor.b   #$03, d7
+    move.b  d7, (NumPlayers)
+    moveq   #SFX_BEEP, d7
+    jsr     (PlaySFX).w
+@NoPlayerToggle:
+    
+    btst.b  #7, (Joy1Press)             ; Press Start to play
+    bne.s   @Quit
+    
+    jsr     (ClearSprites).w            ; Draw cursor
+    bsr     DrawTitleCursor
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @MainLoop
+
+;----------------------------------------------------------------------------
+
+@Quit:
+    moveq   #SFX_LONGBEEP, d7           ; Acknowledge
+    jsr     (PlaySFX).w
+    
+    jsr     (DisableDisplay).w          ; Shut down display
+    move.l  ($000000).w, sp             ; Reset stack
+    bra     MapSelect                   ; Go select a map
+
+;----------------------------------------------------------------------------
+
+@Hiscore:
+    jsr     (DisableDisplay).w          ; Shut down display
+    move.l  ($000000).w, sp             ; Reset stack
+    bra     HallOfFame                  ; Go show high scores
+
+;----------------------------------------------------------------------------
+
+@Debug:
+    btst.l  #0, d0                      ; A+B+C+Up = reset high scores
+    beq.s   @NoHiscoreReset
+    bsr     ResetHiscores
+    bsr     SaveHiscores
+    moveq   #SFX_LONGBEEP, d7
+    jsr     (PlaySFX).w
+    clr.b   (Joy1Press)
+    rts
+@NoHiscoreReset:
+    
+    btst.l  #1, d0                      ; A+B+C+Down = easy high scores
+    beq.s   @NoEasyHiscores
+    bsr     ResetEasyHiscores
+    bsr     SaveHiscores
+    moveq   #SFX_LONGBEEP, d7
+    jsr     (PlaySFX).w
+    clr.b   (Joy1Press)
+    rts
+@NoEasyHiscores:
+    
+    btst.l  #7, d0                      ; A+B+C+Start = sound test
+    bne     SoundTest
+    
+    rts                                 ; No command...
+
+;****************************************************************************
+; DrawTitleBG
+; Draws the title screen background.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawTitleBG:
+    moveq   #4-1, d6
+@YLoop:
+    moveq   #8-1, d7
+@XLoop:
+    move.w  d7, d0
+    move.w  d6, d1
+    lsl.w   #3, d0
+    lsl.w   #3, d1
+    moveq   #8, d2
+    moveq   #8, d3
+    move.w  #$2000+VramTitleBG, d4
+    movem.l d6-d7, -(sp)
+    jsr     (PaintPlaneB).w
+    movem.l (sp)+, d6-d7
+    dbf     d7, @XLoop
+    dbf     d6, @YLoop
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawTitleCursor
+; Draws the cursor in the title screen.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawTitleCursor:
+;    move.w  (Anim), d7                  ; Make cursor blink
+;    btst.l  #3, d7
+;    beq.s   @NoBlink
+;    rts
+;@NoBlink:
+    
+    moveq   #0, d5                      ; Get position of cursor
+    move.b  (NumPlayers), d5
+    lsl.w   #3, d5
+    move.w  d5, d7
+    add.w   d5, d5
+    add.w   d7, d5
+    add.w   #140-24, d5
+    
+    lea     @Table(pc), a0              ; Draw all sprites
+    moveq   #@TableSize-1, d4
+@Loop:
+    move.w  (a0)+, d0
+    move.w  d5, d1
+    move.w  (a0)+, d2
+    move.w  (a0)+, d3
+    jsr     (AddSprite).w
+    dbf     d4, @Loop
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Table:
+    dc.w    $38, $6000+VramCursor, %0010
+    dc.w    $40, $6003+VramCursor, %1110
+    dc.w    $60, $6003+VramCursor, %1110
+    dc.w    $80, $6003+VramCursor, %1110
+    dc.w    $A0, $6003+VramCursor, %1110
+    dc.w    $C0, $6003+VramCursor, %1110
+    dc.w    $E0, $6003+VramCursor, %1110
+    dc.w    $100, $600F+VramCursor, %0010
+
+@TableSize: equ (*-@Table)/6

@@ -1,0 +1,28 @@
+;****************************************************************************
+; GfxTitle
+; Graphics for the title screen (except logo).
+;****************************************************************************
+
+GfxTitle:
+    incbin  "data/title/title.slz"
+    even
+
+;****************************************************************************
+; GfxTitleLogo
+; Graphics for the title screen logo.
+;****************************************************************************
+
+GfxTitleLogo:
+    incbin  "data/title/logo.slz"
+    even
+
+;****************************************************************************
+; Measurements for the title screen logo.
+;****************************************************************************
+
+TITLELOGO_X:        equ 0       ; X coordinate where it appears
+TITLELOGO_Y:        equ 0       ; Y coordinate where it appears
+TITLELOGO_W:        equ 40      ; Width in tiles
+TITLELOGO_H:        equ 28      ; Height in tiles
+
+TITLELOGO_Z:        equ TITLELOGO_W*TITLELOGO_H

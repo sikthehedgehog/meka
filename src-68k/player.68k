@@ -1,0 +1,793 @@
+;****************************************************************************
+; What's in a player's data
+;****************************************************************************
+
+                    rsreset
+
+PLAYER_X:           rs.w 1      ; Horizontal position
+PLAYER_Y:           rs.w 1      ; Vertical position
+PLAYER_XSPEED:      rs.w 1      ; Horizontal speed
+PLAYER_YSPEED:      rs.w 1      ; Vertical speed
+PLAYER_NEWXSPEED:   rs.w 1      ; Desired horizonal speed
+PLAYER_NEWYSPEED:   rs.w 1      ; Desired vertical speed
+PLAYER_ANGLE:       rs.b 1      ; Angle the ship is facing
+PLAYER_NEWANGLE:    rs.b 1      ; Desired angle for the ship
+PLAYER_EXPLODING:   rs.b 1      ; Timer when exploding
+PLAYER_SPAWNING:    rs.b 1      ; Timer when spawning
+PLAYER_SHIELD:      rs.b 1      ; Set if player has a shield
+PLAYER_ID:          rs.b 1      ; Player ID (for convenience)
+
+GRAPPLE_X:          rs.w 1      ; Grapple horizontal position
+GRAPPLE_Y:          rs.w 1      ; Grapple vertical position
+GRAPPLE_ANGLE:      rs.b 1      ; Current angle of the grapple
+GRAPPLE_SHOT:       rs.b 1      ; When shooting, current curve of grapple
+GRAPPLE_WHICH:      rs.b 1      ; Which enemy has been grappled
+                    rs.b 1
+
+PLAYER_SIZE:        rs.b 0
+
+;****************************************************************************
+; InitPlayers
+; Sets up the initial state of both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitPlayers:
+    clr.l   (Score1P)                   ; Start with no points
+    clr.l   (Score2P)
+    
+    move.w  #80, (P1Data+PLAYER_X)      ; Initial X coordinates
+    move.w  #240, (P2Data+PLAYER_X)
+    move.b  #0, (P1Data+PLAYER_ID)      ; For convenience
+    move.b  #1, (P2Data+PLAYER_ID)
+    
+    lea     (P1Data), a0                ; Initialize everything else
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+    bsr.s   @DoIt
+    
+    cmpi.b  #2, (NumPlayers)            ; Allow player 2 to spawn?
+    beq.s   @Done
+    st.b    (P2Data+PLAYER_EXPLODING)
+@Done:
+    rts
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.w  #112, PLAYER_Y(a0)          ; Initial Y coordinate
+    clr.w   PLAYER_XSPEED(a0)           ; Not moving yet
+    clr.w   PLAYER_YSPEED(a0)
+    clr.w   PLAYER_NEWXSPEED(a0)
+    clr.w   PLAYER_NEWYSPEED(a0)
+    move.b  #$40, PLAYER_ANGLE(a0)      ; Start facing upwards
+    move.b  #$40, PLAYER_NEWANGLE(a0)
+    clr.b   PLAYER_EXPLODING(a0)        ; Not exploding yet (phew)
+    move.b  #60, PLAYER_SPAWNING(a0)    ; But spawning instead!
+    clr.b   PLAYER_SHIELD(a0)           ; No shield yet
+    
+    clr.b   GRAPPLE_SHOT(a0)            ; Not shooting yet
+    st.b    GRAPPLE_WHICH(a0)           ; Grabbed nothing yet
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; RunPlayers
+; Handles the behavior of both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+RunPlayers:
+    lea     (P1Data), a0
+    move.b  (Joy1Hold), d0
+    move.b  (Joy1Press), d1
+    bsr.s   @DoIt
+    
+    lea     (P2Data), a0
+    move.b  (Joy2Hold), d0
+    move.b  (Joy2Press), d1
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.b  PLAYER_EXPLODING(a0), d7    ; Is the ship exploding?
+    beq.s   @NotExploding
+    bmi.s   @StayDead
+    addq.b  #1, d7
+    move.b  d7, PLAYER_EXPLODING(a0)
+@StayDead:
+    rts
+@NotExploding:
+
+    move.b  PLAYER_SPAWNING(a0), d7     ; Is the ship spawning?
+    beq.s   @NotSpawning
+    subq.b  #1, d7
+    move.b  d7, PLAYER_SPAWNING(a0)
+    rts
+@NotSpawning:
+
+;----------------------------------------------------------------------------
+
+    move.w  d0, d7                      ; Use D-pad to change the angle
+    and.w   #$0F, d7
+    lea     @AngleTable(pc), a6
+    move.b  (a6,d7.w), d7
+    bmi.s   @NoNewAngle
+    add.b   d7, d7
+    move.b  d7, PLAYER_NEWANGLE(a0)
+@NoNewAngle:
+    
+    move.w  d0, d7                      ; Get acceleration
+    and.w   #$0F, d7
+    lsl.w   #2, d7
+    lea     @DirTable(pc), a6
+    lea     (a6,d7.w), a6
+    move.w  (a6)+, PLAYER_NEWXSPEED(a0)
+    move.w  (a6)+, PLAYER_NEWYSPEED(a0)
+    
+    move.b  PLAYER_ANGLE(a0), d6        ; Turn around smoothly
+    move.b  PLAYER_NEWANGLE(a0), d7
+    sub.b   d6, d7
+    beq.s   @NoTurning
+    bpl.s   @TurnCCW
+@TurnCW:
+    subq.b  #8, d6
+    move.b  d6, PLAYER_ANGLE(a0)
+    bra.s   @NoTurning
+@TurnCCW:
+    addq.b  #8, d6
+    move.b  d6, PLAYER_ANGLE(a0)
+@NoTurning:
+    
+    tst.b   GRAPPLE_SHOT(a0)            ; Shoot?
+    bne.s   @DontShoot
+    and.b   #$70, d1
+    beq.s   @DontShoot
+    tst.b   GRAPPLE_WHICH(a0)
+    bmi.s   @Shoot
+    bsr     TossEnemy
+    bra.s   @DontShoot
+@Shoot:
+    move.b  #4, GRAPPLE_SHOT(a0)
+    moveq   #SFX_SHOOT, d7
+    jsr     (PlaySFX).w
+@DontShoot:
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@AngleTable:
+    dc.b    $FF,$20,$60,$FF
+    dc.b    $40,$30,$50,$40
+    dc.b    $00,$10,$70,$00
+    dc.b    $FF,$20,$60,$FF
+
+@DirTable:
+    dc.w     $00, $00,    $00,-640,    $00, 640,    $00, $00
+    dc.w    -640, $00,   -452,-452,   -452, 452,   -640, $00
+    dc.w     640, $00,    452,-452,    452, 452,    640, $00
+    dc.w     $00, $00,    $00,-640,    $00, 640,    $00, $00
+
+;****************************************************************************
+; DoPlayerPhysics
+; Processes the physics for both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DoPlayerPhysics:
+    lea     (P1Data), a0
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.w  PLAYER_X(a0), d0            ; Retrieve current coordinates
+    move.w  PLAYER_Y(a0), d1
+    
+    move.w  PLAYER_XSPEED(a0), d2       ; Determine speed in pixels
+    move.w  PLAYER_YSPEED(a0), d3
+    add.w   (Subpixel), d2
+    add.w   (Subpixel), d3
+    asr.w   #8, d2
+    asr.w   #8, d3
+    
+    add.w   d2, d0                      ; Apply horizontal momentum
+    
+    move.w  d0, d7                      ; Horizontal collision with map?
+    move.w  d1, d6
+    bsr     TileAt
+    tst.b   d7
+    beq.s   @XClear
+    clr.w   PLAYER_XSPEED(a0)
+    tst.w   d2
+    bmi.s   @PushRight
+@PushLeft:
+    and.w   #$FFE0, d0
+    subq.w  #1, d0
+    bra.s   @XClear
+@PushRight:
+    and.w   #$FFE0, d0
+    add.w   #$20, d0
+@XClear:
+    
+    add.w   d3, d1                      ; Apply vertical momentum
+    
+    move.w  d0, d7                      ; Vertical collision with map?
+    move.w  d1, d6
+    bsr     TileAt
+    tst.b   d7
+    beq.s   @YClear
+    clr.w   PLAYER_YSPEED(a0)
+    tst.w   d3
+    bmi.s   @PushDown
+@PushUp:
+    and.w   #$FFE0, d1
+    subq.w  #1, d1
+    bra.s   @YClear
+@PushDown:
+    and.w   #$FFE0, d1
+    add.w   #$20, d1
+@YClear:
+    
+    move.w  PLAYER_XSPEED(a0), d7       ; Apply horizontal acceleration
+    move.w  PLAYER_NEWXSPEED(a0), d6
+    cmp.w   d6, d7
+    beq.s   @XSpeedOK
+    blt.s   @XTooSmall
+@XTooLarge:
+    sub.w   #$20, d7
+    cmp.w   d6, d7
+    bge.s   @XSpeedOK
+    move.w  d6, d7
+    bra.s   @XSpeedOK
+@XTooSmall:
+    add.w   #$20, d7
+    cmp.w   d6, d7
+    ble.s   @XSpeedOK
+    move.w  d6, d7
+@XSpeedOK:
+    move.w  d7, PLAYER_XSPEED(a0)
+    
+    move.w  PLAYER_YSPEED(a0), d7       ; Apply vertical acceleration
+    move.w  PLAYER_NEWYSPEED(a0), d6
+    cmp.w   d6, d7
+    beq.s   @YSpeedOK
+    blt.s   @YTooSmall
+@YTooLarge:
+    sub.w   #$20, d7
+    cmp.w   d6, d7
+    bge.s   @YSpeedOK
+    move.w  d6, d7
+    bra.s   @YSpeedOK
+@YTooSmall:
+    add.w   #$20, d7
+    cmp.w   d6, d7
+    ble.s   @YSpeedOK
+    move.w  d6, d7
+@YSpeedOK:
+    move.w  d7, PLAYER_YSPEED(a0)
+    
+    move.w  d0, PLAYER_X(a0)            ; Store new coordinates
+    move.w  d1, PLAYER_Y(a0)
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; UpdateGrapples
+; Handles the grapples for both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+UpdateGrapples:
+    lea     (Sines), a1
+    lea     (Cosines), a2
+    
+    lea     (P1Data), a0
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    tst.b   PLAYER_EXPLODING(a0)        ; When the player is dead leave the
+    bne.s   @NotAlive                     ; grapple off-screen just in case
+    tst.b   PLAYER_SPAWNING(a0)
+    beq.s   @StillAlive
+@NotAlive:
+    move.w  #$8000, GRAPPLE_X(a0)
+    move.w  #$8000, GRAPPLE_Y(a0)
+    rts
+@StillAlive:
+    
+    moveq   #0, d2                      ; Make grapple move when shooting
+    move.b  GRAPPLE_SHOT(a0), d2
+    beq.s   @NotShooting
+    addq.b  #4, d2
+    and.b   #$7F, d2
+    move.b  d2, GRAPPLE_SHOT(a0)
+@NotShooting:
+    
+    bne.s   @NotAiming                  ; Align angle with ship
+    move.b  PLAYER_ANGLE(a0), GRAPPLE_ANGLE(a0)
+@NotAiming:
+    
+    moveq   #0, d7                      ; Get base location
+    move.b  GRAPPLE_ANGLE(a0), d7
+    add.w   d7, d7
+    move.w  (a2,d7.w), d0
+    move.w  (a1,d7.w), d1
+    neg.w   d1
+    asr.w   #4, d0
+    asr.w   #4, d1
+    
+    tst.w   d2                          ; Push further when shooting
+    beq.s   @NoShootOffset
+    add.w   d2, d2
+    move.w  (a1,d2.w), d5
+    move.w  (a2,d7.w), d3
+    move.w  (a1,d7.w), d4
+    neg.w   d4
+    muls.w  d5, d3
+    muls.w  d5, d4
+    asr.l   #2, d3
+    asr.l   #2, d4
+    asr.w   #8, d3
+    asr.w   #8, d4
+    add.w   d3, d0
+    add.w   d4, d1
+@NoShootOffset:
+    
+    add.w   PLAYER_X(a0), d0            ; Apply origin offset
+    add.w   PLAYER_Y(a0), d1
+    move.w  d0, GRAPPLE_X(a0)           ; Store new coordinates
+    move.w  d1, GRAPPLE_Y(a0)
+    
+    moveq   #0, d7                      ; Did we grab an enemy?
+    move.b  GRAPPLE_WHICH(a0), d7
+    bmi.s   @NotCarrying
+    lsl.w   #4, d7                      ; Make it follow the grapple
+    lea     (EnemyData), a6
+    lea     (a6,d7.w), a6
+    move.w  d0, ENEMY_X(a6)
+    move.w  d1, ENEMY_Y(a6)
+@NotCarrying:
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; ScanGrapples
+; Searches for enemies to take by the grapples.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+ScanGrapples:
+    lea     (P1Data), a0
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    tst.b   GRAPPLE_SHOT(a0)            ; Check if it should grab
+    beq     @NotGrabbing
+    tst.b   GRAPPLE_WHICH(a0)
+    bpl     @NotGrabbing
+    
+    lea     (EnemyData), a6             ; Scan all enemies
+    moveq   #MAX_ENEMIES-1, d7
+@Loop:
+    tst.b   ENEMY_TYPE(a6)              ; Is this enemy grabbable?
+    beq.s   @Skip
+    cmpi.b  #ESTATE_NORMAL, ENEMY_STATE(a6)
+    bne.s   @Skip
+    
+    move.w  GRAPPLE_X(a0), d0            ; Get distance to enemy
+    sub.w   ENEMY_X(a6), d0
+    bpl.s   *+4
+    neg.w   d0
+    move.w  GRAPPLE_Y(a0), d1
+    sub.w   ENEMY_Y(a6), d1
+    bpl.s   *+4
+    neg.w   d1
+    
+    cmp.w   #$0C, d0                    ; Is it close enough?
+    bge.s   @Skip
+    cmp.w   #$0C, d1
+    bge.s   @Skip
+    
+    eor.b   #MAX_ENEMIES-1, d7          ; Take it!
+    move.b  d7, GRAPPLE_WHICH(a0)
+    move.b  #ESTATE_CAUGHT, ENEMY_STATE(a6)
+    clr.w   ENEMY_XSPEED(a6)
+    clr.w   ENEMY_YSPEED(a6)
+    move.b  PLAYER_ID(a0), ENEMY_ID(a6)
+    
+    move.b  GRAPPLE_SHOT(a0), d7        ; Make grapple go back immediately
+    cmp.b   #$40, d7
+    bhs.s   @NoPushBack
+    sub.b   #$40, d7
+    neg.b   d7
+    add.b   #$40, d7
+    move.b  d7, GRAPPLE_SHOT(a0)
+@NoPushBack:
+    
+    move.l  #SCORE_CATCH, d7            ; Get points!
+    move.b  PLAYER_ID(a0), d6
+    bsr     AddScore
+    rts
+    
+@Skip:
+    lea     $10(a6), a6                 ; Try next enemy
+    dbf     d7, @Loop
+    
+@NotGrabbing:
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; CheckPlayersHurt
+; Checks if the players got hit by an enemy.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+CheckPlayersHurt:
+    lea     (P1Data), a0
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    tst.b   PLAYER_EXPLODING(a0)        ; Player is alive, right?
+    bne.s   @NotAlive
+    tst.b   PLAYER_SPAWNING(a0)
+    beq.s   @Alive
+@NotAlive:
+    rts
+    
+@Alive:
+    lea     (EnemyData), a6             ; Scan all enemies
+    move.w  #MAX_ENEMIES-1, d7
+@Loop:
+    tst.b   ENEMY_TYPE(a6)              ; Check if the enemy is collidable
+    beq.s   @Skip
+    cmpi.b  #ESTATE_NORMAL, ENEMY_STATE(a6)
+    bne.s   @Skip
+    
+    move.w  PLAYER_X(a0), d0            ; Get distance to enemy
+    sub.w   ENEMY_X(a6), d0
+    bpl.s   *+4
+    neg.w   d0
+    move.w  PLAYER_Y(a0), d1
+    sub.w   ENEMY_Y(a6), d1
+    bpl.s   *+4
+    neg.w   d1
+    
+    cmp.w   #$10, d0                    ; Is it close enough?
+    bge.s   @Skip
+    cmp.w   #$10, d1
+    bge.s   @Skip
+    
+    tst.b   PLAYER_SHIELD(a0)           ; Do we have a shield?
+    beq.s   @NoShield
+    clr.b   PLAYER_SHIELD(a0)
+    movea.l a6, a1
+    move.l  #SCORE_KILL, d7
+    move.b  PLAYER_ID(a0), d6
+    bsr     AddScore
+    movea.l a1, a0
+    bra     KillEnemy
+    
+@NoShield:
+    move.b  #1, PLAYER_EXPLODING(a0)    ; Ouch
+    clr.w   PLAYER_XSPEED(a0)
+    clr.w   PLAYER_YSPEED(a0)
+    clr.w   PLAYER_NEWXSPEED(a0)
+    clr.w   PLAYER_NEWYSPEED(a0)
+    bsr     TossEnemy
+    moveq   #SFX_LOSE, d7
+    jsr     (PlaySFX).w
+    rts
+    
+@Skip:
+    lea     $10(a6), a6                 ; Check next enemy
+    dbf     d7, @Loop
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; CheckPlayersItem
+; Checks if the players got an item.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+CheckPlayersItem:
+    lea     (P1Data), a0
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    tst.b   (ItemType)                  ; Check that an item exists
+    beq     @NoItem
+    tst.b   PLAYER_EXPLODING(a0)        ; And that the player is alive
+    bne     @NoItem
+    tst.b   PLAYER_SPAWNING(a0)
+    bne     @NoItem
+    
+    move.w  PLAYER_X(a0), d0            ; Get distance to item
+    sub.w   (ItemX), d0
+    bpl.s   *+4
+    neg.w   d0
+    move.w  PLAYER_Y(a0), d1
+    sub.w   (ItemY), d1
+    bpl.s   *+4
+    neg.w   d1
+    
+    cmp.w   #$14, d0                    ; Is there collision?
+    bgt.s   @NoItem
+    cmp.w   #$14, d1
+    bgt.s   @NoItem
+    
+    move.l  #SCORE_ITEM, d7             ; Bonus points!
+    move.b  PLAYER_ID(a0), d6
+    bsr     AddScore
+    
+    move.b  (ItemType), d7              ; Got a shield?
+    subq.b  #1, d7
+    bne.s   @NoShield
+    st.b    PLAYER_SHIELD(a0)
+    moveq   #SFX_ITEM, d7
+    jsr     (PlaySFX).w
+    bra.s   @ItemTaken
+@NoShield:
+    
+    subq.b  #1, d7                      ; Got a bomb?
+    bne.s   @NoBomb
+    move.b  PLAYER_ID(a0), d0
+    bsr     KillEmAll
+@NoBomb:
+    
+@ItemTaken:
+    clr.b   (ItemType)                  ; Item is no more
+    
+@NoItem:
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawPlayers
+; Draws both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawPlayers:
+    lea     (P1Data), a0
+    move.w  #$0000, d2
+    bsr.s   @DoIt
+    
+    lea     (P2Data), a0
+    move.w  #$2000, d2
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.w  PLAYER_X(a0), d0            ; Determine position on screen
+    move.w  PLAYER_Y(a0), d1
+    sub.w   #$10, d0
+    sub.w   #$10, d1
+    
+    moveq   #0, d7                      ; Exploding or spawning ship?
+    move.b  PLAYER_EXPLODING(a0), d7
+    bne.s   @Exploding
+    move.b  PLAYER_SPAWNING(a0), d7
+    bne.s   @Spawning
+    
+    btst.b  #0, (Anim+1)                ; Draw the shield?
+    bne.s   @NoShieldBlink
+    tst.b   PLAYER_SHIELD(a0)
+    bne     @Shield
+    
+@NoShieldBlink:
+    moveq   #0, d7                      ; Determine ship sprite
+    move.b  PLAYER_ANGLE(a0), d7
+    addq.b  #8, d7
+    lsr.w   #4-1, d7
+    and.w   #$FF<<1, d7
+    lea     (PlayerTable), a6
+    add.w   (a6,d7.w), d2
+    
+    moveq   #%1111, d3                  ; Draw ship
+    jsr     (AddSprite).w
+    
+@DontDraw:
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Exploding:
+    move.w  d7, d2                      ; Get frame to show
+    subq.w  #1, d2
+    lsr.w   #2, d2
+    cmp.w   #3, d2
+    bhi.s   @DontDraw
+    lsl.w   #4, d2
+    add.w   #VramExplosion, d2
+    
+    moveq   #%1111, d3                  ; Draw explosion
+    jsr     (AddSprite).w
+    rts
+
+;----------------------------------------------------------------------------
+
+@Spawning:
+    add.w   #VramSparkle, d2            ; Sparkle sprite
+    moveq   #%0101, d3
+    
+    move.w  (Anim), d6                  ; Blink!
+    and.w   #$0001, d6
+    lsl.w   #2, d6
+    add.w   d6, d2
+    
+    lea     (Sines), a1                 ; Determine rotation
+    lea     (Cosines), a2
+    move.w  d7, d6
+    lsl.w   #3, d6
+    and.w   #$FF<<1, d6
+    move.w  (a2,d6.w), d4
+    move.w  (a1,d6.w), d5
+    neg.w   d5
+    muls.w  d7, d4
+    muls.w  d7, d5
+    asr.w   #8, d4
+    asr.w   #8, d5
+    
+    move.w  PLAYER_X(a0), d0            ; Draw first sparkle
+    move.w  PLAYER_Y(a0), d1
+    subq.w  #8, d0
+    subq.w  #8, d1
+    add.w   d4, d0
+    add.w   d5, d1
+    jsr     (AddSprite).w
+    
+    move.w  PLAYER_X(a0), d0            ; Draw second sparkle
+    move.w  PLAYER_Y(a0), d1
+    subq.w  #8, d0
+    subq.w  #8, d1
+    add.w   d5, d0
+    sub.w   d4, d1
+    jsr     (AddSprite).w
+    
+    move.w  PLAYER_X(a0), d0            ; Draw third sparkle
+    move.w  PLAYER_Y(a0), d1
+    subq.w  #8, d0
+    subq.w  #8, d1
+    sub.w   d4, d0
+    sub.w   d5, d1
+    jsr     (AddSprite).w
+    
+    move.w  PLAYER_X(a0), d0            ; Draw fourth sparkle
+    move.w  PLAYER_Y(a0), d1
+    subq.w  #8, d0
+    subq.w  #8, d1
+    sub.w   d5, d0
+    add.w   d4, d1
+    jsr     (AddSprite).w
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@Shield:
+    lea     @ShieldTable(pc), a1        ; Draw shield
+    moveq   #4-1, d4
+@ShieldLoop:
+    move.w  PLAYER_X(a0), d0
+    move.w  PLAYER_Y(a0), d1
+    add.w   (a1)+, d0
+    add.w   (a1)+, d1
+    move.w  (a1)+, d2
+    move.w  (a1)+, d3
+    jsr     (AddSprite).w
+    dbf     d4, @ShieldLoop
+    
+    rts                                 ; End of subroutine
+
+@ShieldTable:
+    dc.w    -$14, -$14, $4000+VramShield, %1111
+    dc.w     $0C, -$14, $4010+VramShield, %0011
+    dc.w    -$14,  $0C, $4014+VramShield, %1100
+    dc.w     $0C,  $0C, $4018+VramShield, %0000
+
+;****************************************************************************
+; DrawGrapples
+; Draws the grapples for both players.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawGrapples:
+    lea     (Sines), a1
+    lea     (Cosines), a2
+    
+    lea     (P1Data), a0
+    move.w  #$2000, d2
+    bsr.s   @DoIt
+    lea     (P2Data), a0
+    move.w  #$0000, d2
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    tst.b   PLAYER_EXPLODING(a0)        ; Shouldn't show up?
+    bne.s   @NoGrapple
+    
+    move.w  GRAPPLE_X(a0), d0           ; Determine position on screen
+    move.w  GRAPPLE_Y(a0), d1
+    subq.w  #8, d0
+    subq.w  #8, d1
+    
+    moveq   #%0101, d3                  ; Draw grapple sprite
+    add.w   #VramGrapple, d2
+    jsr     (AddSprite).w
+    
+@NoGrapple:
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; TossEnemy
+; Makes a player toss an enemy.
+;----------------------------------------------------------------------------
+; input a0.l ... Pointer to player data
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4-a6
+;****************************************************************************
+
+TossEnemy:
+    tst.b   GRAPPLE_WHICH(a0)           ; Make sure there's something to toss
+    bpl.s   @CanToss
+    rts
+    
+@CanToss:
+    moveq   #0, d7                      ; Get address of enemy
+    move.b  GRAPPLE_WHICH(a0), d7
+    lsl.w   #4, d7
+    lea     (EnemyData), a6
+    lea     (a6,d7.w), a6
+    
+    move.b  #ESTATE_TOSSED, ENEMY_STATE(a6) ; Mark enemy as tossed
+    
+    moveq   #0, d7                      ; Set enemy speed
+    move.b  GRAPPLE_ANGLE(a0), d7
+    add.w   d7, d7
+    lea     (Sines), a5
+    lea     (Cosines), a4
+    move.w  (a5,d7.w), d6
+    move.w  (a4,d7.w), d7
+    neg.w   d6
+    add.w   d7, d7
+    move.w  d7, d5
+    add.w   d7, d7
+    add.w   d5, d7
+    add.w   d6, d6
+    move.w  d6, d5
+    add.w   d6, d6
+    add.w   d5, d6
+    add.w   PLAYER_XSPEED(a6), d7
+    add.w   PLAYER_YSPEED(a6), d6
+    move.w  d7, ENEMY_XSPEED(a6)
+    move.w  d6, ENEMY_YSPEED(a6)
+    
+    moveq   #SFX_TOSS, d7               ; Make noise
+    jsr     (PlaySFX).w
+    
+    st.b    GRAPPLE_WHICH(a0)           ; No enemy taken anymore
+    rts                                 ; End of subroutine

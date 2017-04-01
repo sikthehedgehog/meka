@@ -1,0 +1,53 @@
+;****************************************************************************
+; Tile IDs for in-game graphics
+;****************************************************************************
+
+                    rsreset
+                    
+                    rs.b 1          ; Blank tile
+VramPlayer:         rs.b 16*5       ; Player ship
+VramGrapple:        rs.b 4          ; Player grapple
+VramSparkle:        rs.b 4*2        ; Player spawning sparkle
+VramShield:         rs.b 25         ; Player shield
+VramItems:          rs.b 9*2        ; Items
+VramBlob:           rs.b 16*6       ; Blobs
+VramExplosion:      rs.b 16*4       ; Explosions
+VramNumbers:        rs.b 4*10       ; Score numbers
+VramPause:          rs.b 4*5        ; "PAUSE"
+
+VramSelectUp:       rs.b 16         ; Up arrow in map select
+VramSelectDown:     rs.b 16         ; Down arrow in map select
+VramMapSelect:      rs.b 4*9        ; "MAP SELECT"
+
+VramGameOver:       rs.b 4*8        ; "GAME OVER"
+VramPlayerText:     rs.b 4*6        ; "PLAYER"
+
+VramSizeIngame:     rs.b 0
+VramTiles:          rs.b 16*2       ; Map tiles
+
+;****************************************************************************
+; Tile IDs for title screen graphics
+;****************************************************************************
+
+                    rsreset
+                    
+                    rs.b 1          ; Blank tile
+VramTitleBG:        rs.b 64         ; Title screen background
+VramCursor:         rs.b 18         ; Menu cursor
+
+VramSizeTitle:      rs.b 0
+VramTitleLogo:      rs.b 0          ; Title logo
+
+;****************************************************************************
+; Tile IDs for high score table graphics
+;****************************************************************************
+
+                    rsreset
+                    
+                    rs.b 1          ; Blank tile
+VramHiNumbers:      rs.b 4*10       ; Numbers
+VramHiLetters:      rs.b 4*27       ; Letters
+VramHiEnd:          rs.b 4          ; "ED" (END)
+
+VramSizeHiscore:    rs.b 0
+VramHiscoreBG:      rs.b 0          ; Background

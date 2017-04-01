@@ -1,0 +1,153 @@
+;****************************************************************************
+; DecompressSLZ
+; Decompresses SLZ data into memory.
+;----------------------------------------------------------------------------
+; input a6.l .... Pointer to compressed data
+; input a5.l .... Where to store decompressed data
+;----------------------------------------------------------------------------
+; output a6.l ... Right after input buffer
+; output a5.l ... Right after output buffer
+;----------------------------------------------------------------------------
+; breaks: d5-d7
+;****************************************************************************
+
+DecompressSLZ:
+    move.w  d3, -(sp)               ; Save registers
+    move.w  d4, -(sp)
+
+    move.b  (a6)+, d7               ; Get uncompressed size
+    lsl.w   #8, d7
+    move.b  (a6)+, d7
+
+    moveq   #1, d6                  ; Cause code to fetch new token data
+                                    ; as soon as it starts
+@MainLoop:
+    tst.w   d7                      ; Did we read all the data?
+    beq     @End                      ; If so, we're done with it!
+
+    subq.w  #1, d6                  ; Check if we need more tokens
+    bne.s   @HasTokens
+    move.b  (a6)+, d5
+    moveq   #8, d6
+@HasTokens:
+
+    add.b   d5, d5                  ; Get next token type
+    bcc.s   @Uncompressed             ; 0 = uncompressed, 1 = compressed
+
+    move.b  (a6)+, d3               ; Compressed? Read string info
+    lsl.w   #8, d3                    ; d3 = distance
+    move.b  (a6)+, d3                 ; d4 = length
+    move.b  d3, d4
+    lsr.w   #4, d3
+    and.w   #$0F, d4
+
+    subq.w  #3, d7                  ; Length is offset by 3
+    sub.w   d4, d7                  ; Now that we know the string length,
+                                      ; discount it from the amount of data
+                                      ; to be read
+
+    addq.w  #3, d3                  ; Distance is offset by 3
+    neg.w   d3                      ; Make distance go backwards
+
+    add.w   d4, d4                  ; Copy bytes using Duff's device
+    add.w   d4, d4                    ; MUCH faster than a loop, due to lack
+    eor.w   #$0F<<2, d4               ; of iteration overhead
+    jmp     @Duff(pc,d4.w)
+@Duff:
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+    
+    move.b  (a5,d3.w), (a5)+
+    move.b  (a5,d3.w), (a5)+
+
+    bra     @MainLoop               ; Keep processing data
+
+@Uncompressed:
+    move.b  (a6)+, (a5)+            ; Uncompressed? Read as is
+    subq.w  #1, d7                  ; It's always one byte long
+    bra     @MainLoop               ; Keep processing data
+
+@End:
+    move.w  (sp)+, d4               ; Restore registers
+    move.w  (sp)+, d3
+    rts                             ; End of subroutine
+
+;****************************************************************************
+; DecompressUFTC
+; Decompresses UFTC data
+;----------------------------------------------------------------------------
+; input a6.l .... Pointer to UFTC data
+; input a5.l .... Pointer to output buffer
+; input d7.w .... ID of first tile to decompress (counting from 0)
+; input d6.w .... How many tiles to decompress
+;----------------------------------------------------------------------------
+; output a5.l ... Right after output buffer
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4, a6
+;****************************************************************************
+
+DecompressUFTC:
+    move.l  a2, -(sp)                   ; Save registers
+    move.l  a3, -(sp)
+    
+    moveq   #0, d5                      ; Get size of dictionary
+    move.w  (a6)+, d5
+    
+    lea     (a6,d5.l), a4               ; Get address of data with first tile
+    and.l   #$FFFF, d7                    ; to be decompressed (using a dword
+    lsl.l   #3, d7                        ; so we can have up to 8192 tiles)
+    lea     (a4,d7.l), a4
+    
+    bra.s   @LoopEnd                    ; Start decompressing
+@Loop:
+    move.w  (a4)+, d5                   ; Fetch addresses of dictionary
+    lea     (a6,d5.l), a3                 ; entries for the first two 4x4
+    move.w  (a4)+, d5                     ; blocks of this tile
+    lea     (a6,d5.l), a2
+    
+    move.w  (a3)+, (a5)+                ; Decompress first pair of 4x4 blocks
+    move.w  (a2)+, (a5)+                  ; into the output buffer
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    
+    move.w  (a4)+, d5                   ; Fetch addresses of dictionary
+    lea     (a6,d5.l), a3                 ; entries for the last two 4x4
+    move.w  (a4)+, d5                     ; blocks of this tile
+    lea     (a6,d5.l), a2
+    
+    move.w  (a3)+, (a5)+                ; Decompress last pair of 4x4 blocks
+    move.w  (a2)+, (a5)+                  ; into the output buffer
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    move.w  (a3)+, (a5)+
+    move.w  (a2)+, (a5)+
+    
+@LoopEnd:
+    dbf     d6, @Loop                   ; Go for next tile
+    
+    move.l  (sp)+, a3                   ; Restore registers
+    move.l  (sp)+, a2
+    rts                                 ; End of subroutine

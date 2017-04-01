@@ -1,0 +1,92 @@
+;****************************************************************************
+; List of sound instruments.
+;****************************************************************************
+
+InstrumentList:
+    Echo_ListEntry  InstrSlapBass       ; 0 [FM] Slab bass
+    Echo_ListEntry  InstrSquare         ; 1 [FM] Square wave
+    Echo_ListEntry  InstrExplosion      ; 2 [PCM] Explosion
+    Echo_ListEntry  InstrPSGBasic       ; 3 [PSG] Basic PSG instrument
+    Echo_ListEntry  InstrPSGFlat        ; 4 [PSG] Flat PSG instrument
+    Echo_ListEntry  InstrSynthBass      ; 5 [FM] Synth bass
+    Echo_ListEntry  InstrBass           ; 6 [FM] Standard bass
+    Echo_ListEntry  InstrSynthBell      ; 7 [FM] Synth bell
+    Echo_ListEntry  InstrPSGBell        ; 8 [PSG] Bell PSG instrument
+    Echo_ListEntry  InstrOverGuitar     ; 9 [FM] Overdriven guitar
+    Echo_ListEntry  InstrBigBoom        ; 10 [FM] Big boom sound effect
+    Echo_ListEnd
+
+InstrSlapBass:          incbin "data/voices/slapbass.eif"
+InstrSquare:            incbin "data/voices/square.eif"
+InstrExplosion:         incbin "data/voices/explosion.ewf"
+InstrPSGBasic:          dc.b    $00,$01,$FE,$02,$FF
+InstrPSGFlat:           dc.b    $FE,$00,$FF
+InstrSynthBass:         incbin "data/voices/synbass.eif"
+InstrBass:              incbin "data/voices/bass.eif"
+InstrSynthBell:         incbin "data/voices/ding.eif"
+InstrPSGBell:           dc.b    $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$FE,$0F,$FF
+InstrOverGuitar:        incbin "data/voices/oguitar.eif"
+InstrBigBoom:           incbin "data/voices/bigboom.eif"
+                        even
+
+;****************************************************************************
+; List of BGMs
+;****************************************************************************
+
+                    rsreset
+                    rs.b 1
+BGM_INGAME:         rs.b 1          ; Playing the game
+BGM_MAPSELECT:      rs.b 1          ; Map select
+BGM_HISCORE:        rs.b 1          ; Get a high score
+BGM_GAMEOVER:       rs.b 1          ; Game over
+
+NUM_BGM:            rs.b 0
+
+BGMList:
+    dc.l    BGMData_Ingame          ; BGM_INGAME
+    dc.l    BGMData_MapSelect       ; BGM_MAPSELECT
+    dc.l    BGMData_Hiscore         ; BGM_HISCORE
+    dc.l    BGMData_GameOver        ; BGM_GAMEOVER
+
+BGMData_Ingame:         incbin "data/bgm/ingame.esf"
+BGMData_MapSelect:      incbin "data/bgm/map_select.esf"
+BGMData_Hiscore:        incbin "data/bgm/hiscore.esf"
+BGMData_GameOver:       incbin "data/bgm/game_over.esf"
+                        even
+
+;****************************************************************************
+; List of SFXs
+;****************************************************************************
+
+                    rsreset
+                    rs.b 1
+SFX_SHOOT:          rs.b 1          ; Player shoots grapple
+SFX_TOSS:           rs.b 1          ; Player tosses enemy
+SFX_KILL:           rs.b 1          ; Enemy explodes
+SFX_ITEM:           rs.b 1          ; Get an item
+SFX_KILLALL:        rs.b 1          ; All enemies explode
+SFX_LOSE:           rs.b 1          ; Player explodes
+SFX_BEEP:           rs.b 1          ; UI short beeping
+SFX_LONGBEEP:       rs.b 1          ; UI long beeping
+
+NUM_SFX:            rs.b 0
+
+SFXList:
+    dc.l    SFXData_Shoot           ; SFX_SHOOT
+    dc.l    SFXData_Toss            ; SFX_TOSS
+    dc.l    SFXData_Kill            ; SFX_KILL
+    dc.l    SFXData_Item            ; SFX_ITEM
+    dc.l    SFXData_KillAll         ; SFX_KILLALL
+    dc.l    SFXData_Lose            ; SFX_LOSE
+    dc.l    SFXData_Beep            ; SFX_BEEP
+    dc.l    SFXData_LongBeep        ; SFX_LONGBEEP
+
+SFXData_Shoot:          include "data/sfx/shoot.68k"
+SFXData_Toss:           include "data/sfx/toss.68k"
+SFXData_Kill:           include "data/sfx/kill.68k"
+SFXData_Item:           include "data/sfx/item.68k"
+SFXData_KillAll:        include "data/sfx/kill_all.68k"
+SFXData_Lose:           include "data/sfx/lose.68k"
+SFXData_Beep:           include "data/sfx/beep.68k"
+SFXData_LongBeep:       include "data/sfx/long_beep.68k"
+                        even

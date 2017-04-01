@@ -1,0 +1,162 @@
+;****************************************************************************
+; SetMapAddr
+; Sets the map data address to the new current map.
+;----------------------------------------------------------------------------
+; breaks: d7, a6
+;****************************************************************************
+
+SetMapAddr:
+    moveq   #0, d7
+    move.b  (CurrMap), d7
+    lsl.w   #2, d7
+    lea     (MapList), a6
+    move.l  (a6,d7.w), (MapAddr)
+    rts
+
+;****************************************************************************
+; DrawMap
+; Draws the map.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawMap:
+    move.l  (MapAddr), a0               ; Get address of map data
+    lea     13(a0), a0
+    
+    move.w  (MapPos), d5                ; Offset at which map is drawn
+    
+    moveq   #7-1, d6
+@YLoop:
+    moveq   #10-1, d7
+@XLoop:
+    move.w  d7, d0
+    move.w  d6, d1
+    lsl.w   #2, d0
+    lsl.w   #2, d1
+    add.w   d5, d0
+    add.w   d5, d1
+    and.w   #$3F, d0
+    and.w   #$3F, d1
+    moveq   #4, d2
+    moveq   #4, d3
+    moveq   #0, d4
+    move.b  (a0)+, d4
+    lsl.w   #4, d4
+    add.w   #$6000+VramTiles, d4
+    movem.l d5-d7/a0, -(sp)
+    jsr     (PaintPlaneA).w
+    movem.l (sp)+, d5-d7/a0
+    dbf     d7, @XLoop
+    lea     2(a0), a0
+    dbf     d6, @YLoop
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; UpdateMapAnim
+; Updates the animation for the map tiles.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+UpdateMapAnim:
+    move.w  (Anim), d0                  ; Determine offset within animation
+    lsr.w   #2, d0
+    sub.w   (SlidePos), d0
+    and.w   #$1F, d0
+    lsl.w   #4, d0
+    
+    move.w  d0, d7                      ; Decompress graphics for floor tiles
+    move.w  #$10, d6
+    lea     (GfxTileFloor), a6
+    lea     (TileFloorBuf), a5
+    jsr     (DecompressUFTC).w
+    
+    move.w  d0, d7                      ; Decompress graphics for empty tiles
+    move.w  #$10, d6
+    lea     (GfxTileEmpty), a6
+    lea     (TileEmptyBuf), a5
+    jsr     (DecompressUFTC).w
+    
+    lea     (TileFloorBuf), a6          ; Get graphics into VRAM
+    move.w  #VramTiles, d7
+    moveq   #$10*2, d6
+    jsr     (LoadTiles).w
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; TileAt
+; Gets the tile at a given position
+;----------------------------------------------------------------------------
+; input d7.w .... X coordinate
+; input d6.w .... Y coordinate
+;----------------------------------------------------------------------------
+; output d7.b ... Tile type
+;----------------------------------------------------------------------------
+; breaks: d5-d6, a4-a6
+;****************************************************************************
+
+TileAt:
+    add.w   #$20, d7                    ; Map starts at -1;-1
+    add.w   #$20, d6
+    asr.w   #5, d7                      ; Convert to tile coordinates
+    asr.w   #5, d6
+    
+    add.w   d6, d6                      ; Get offset within map
+    add.w   d6, d6
+    add.w   d6, d7
+    add.w   d6, d6
+    add.w   d6, d7
+    
+    move.l  (MapAddr), a6               ; Retrieve tile value
+    move.b  (a6,d7.w), d7
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; InitQuake
+; Resets the quake motion.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+InitQuake:
+    clr.w   (QuakeTimer)
+    clr.w   (QuakeOffset)
+    rts
+
+;****************************************************************************
+; UpdateQuake
+; Updates the quake motion and stops it after a while.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+UpdateQuake:
+    move.w  (QuakeTimer), d7            ; Reduce time left if ongoing
+    beq.s   @NoQuake
+    subq.w  #1, d7
+    move.w  d7, (QuakeTimer)
+    
+    and.w   #$02, d7                    ; Determine the offset to show
+    subq.w  #1, d7
+    move.w  d7, (QuakeOffset)
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@NoQuake:
+    clr.w   (QuakeOffset)               ; No quake, don't move
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; SetQuake
+; Sets off a quake.
+;****************************************************************************
+
+SetQuake:
+    move.w  #$20, (QuakeTimer)
+    rts

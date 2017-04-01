@@ -1,0 +1,7 @@
+;****************************************************************************
+; Sines and cosines look-up tables
+; 256 word entries with values from -$100 to $100
+;****************************************************************************
+
+Sines:   incbin "data/math/sines.blob"
+Cosines: equ Sines+$80

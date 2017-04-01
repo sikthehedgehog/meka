@@ -1,0 +1,689 @@
+;****************************************************************************
+; HallOfFame
+; Shows the high score table in the attract loop.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+HallOfFame:
+    st.b    (Rank1P)                    ; No name entry
+    st.b    (Rank2P)
+    move.b  #3, (EntryPos1P)
+    move.b  #3, (EntryPos2P)
+    
+    bsr     HiscoreScreen               ; Show the high score table
+    
+    jsr     (DisableDisplay).w          ; Return to title screen
+    move.l  ($0000).w, sp
+    bra     TitleScreen
+
+;****************************************************************************
+; NameEntry
+; Shows the high score table for name entry.
+;----------------------------------------------------------------------------
+; input d2.w ... Player 1 rank (-1 if didn't rank)
+; input d3.w ... Player 2 rank (-1 if didn't rank)
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+NameEntry:
+    move.b  d2, (Rank1P)                ; Store obtained ranks
+    move.b  d3, (Rank2P)
+    
+    tst.b   d2                          ; Determine cursor postion for 1P
+    smi.b   d7
+    and.b   #$03, d7
+    move.b  d7, (EntryPos1P)
+    
+    tst.b   d3                          ; Determine cursor postion for 2P
+    smi.b   d7
+    and.b   #$03, d7
+    move.b  d7, (EntryPos2P)
+    
+    moveq   #BGM_HISCORE, d7            ; Start playing music
+    jsr     (PlayBGM).w
+    
+    bsr     HiscoreScreen               ; Show high score table
+    bsr     SaveHiscores                ; Save new high scores
+    
+    jsr     (DisableDisplay).w          ; Reset the game
+    move.l  ($0000).w, sp
+    bra     TitleScreen
+
+;****************************************************************************
+; HiscoreScreen
+; Main loop for the high score table.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+HiscoreScreen:
+    jsr     (ResetVideo).w              ; Reset everything
+    clr.b   (Joy1Press)
+    clr.b   (Joy2Press)
+    
+    lea     (GfxHiscore), a6            ; Load most graphics
+    lea     (LocalRAMHiscore), a5
+    jsr     (DecompressSLZ).w
+    lea     (LocalRAMHiscore), a6
+    moveq   #1, d7
+    move.w  #VramSizeHiscore-1, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    lea     (GfxHiscoreBG), a6          ; Load background
+    lea     (LocalRAMHiscore), a5
+    jsr     (DecompressSLZ).w
+    moveq   #0, d0
+    moveq   #0, d1
+    moveq   #40, d2
+    moveq   #28, d3
+    move.w  #$0000+VramHiscoreBG, d4
+    lea     (LocalRAMHiscore), a6
+    jsr     (DrawPlaneB).w
+    lea     (LocalRAMHiscore+40*28*2), a6
+    move.w  #VramHiscoreBG, d7
+    move.w  #$100, d6
+    jsr     (LoadTiles).w
+    jsr     (FlushDMABuf).w
+    
+    moveq   #0, d7                      ; Load palettes
+    lea     (PalHiscore), a6
+    jsr     (SetPalette).w
+    move.l  #$0CAA0000, (PaletteBuf+$42)
+    move.l  #$08CC0000, (PaletteBuf+$62)
+    
+    bsr     DrawHiscores                ; Draw all scores
+    bsr     DrawHiscoreNames            ; Draw all names
+
+;----------------------------------------------------------------------------
+
+@EntryLoop:
+    cmpi.b  #3, (EntryPos1P)            ; Entering names yet?
+    bne.s   @EntryOK
+    cmpi.b  #3, (EntryPos2P)
+    beq.s   @EntryOver
+@EntryOK:
+    
+    bsr     ProcessEntry                ; Update names
+    
+    jsr     (ClearSprites).w            ; Draw names being entered
+    bsr     DrawEntryNames
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @EntryLoop
+
+;----------------------------------------------------------------------------
+
+@EntryOver:
+    clr.w   (Anim)                      ; Reset timer
+    
+@ShowLoop:
+    btst.b  #7, (Joy1Press)             ; Press Start to quit early
+    bne.s   @Quit
+    cmpi.w  #300, (Anim)                ; Or wait a bit instead
+    beq.s   @Quit
+    
+    jsr     (ClearSprites).w            ; Draw names that were entered
+    bsr     DrawEntryNames
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @ShowLoop
+
+;----------------------------------------------------------------------------
+
+@Quit:
+    rts
+
+;****************************************************************************
+; ProcessEntry
+; Processes name entry input.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+ProcessEntry:
+    move.b  (Joy1Press), d0             ; Process player 1
+    move.b  (Rank1P), d1
+    move.b  (EntryPos1P), d2
+    bsr.s   @DoIt
+    move.b  d2, (EntryPos1P)
+    
+    move.b  (Joy2Press), d0             ; Process player 2
+    move.b  (Rank2P), d1
+    move.b  (EntryPos2P), d2
+    bsr.s   @DoIt
+    move.b  d2, (EntryPos2P)
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    cmp.b   #3, d2                      ; No entry going on?
+    beq.s   @Done
+    tst.b   d1
+    bmi.s   @Done
+    
+    moveq   #0, d7                      ; Get where the name is stored
+    move.b  d1, d7
+    lsl.w   #2, d7
+    lea     (HiscoreNames), a6
+    lea     (a6,d7.w), a6
+    
+    move.l  (a6), d3                    ; Get the current name
+    
+    moveq   #0, d4                      ; Make current letter easy to alter
+    move.b  d2, d4
+    addq.b  #1, d4
+    lsl.w   #3, d4
+    rol.l   d4, d3
+    
+    btst.l  #0, d0                      ; Next letter?
+    beq.s   @NoNext
+    moveq   #SFX_BEEP, d7
+    jsr     (PlaySFX).w
+    addq.b  #1, d3
+    cmp.b   #27, d3
+    bne.s   @NoNext
+    clr.b   d3
+@NoNext:
+    
+    btst.l  #1, d0                      ; Previous letter?
+    beq.s   @NoPrev
+    moveq   #SFX_BEEP, d7
+    jsr     (PlaySFX).w
+    subq.b  #1, d3
+    bpl.s   @NoPrev
+    move.b  #26, d3
+@NoPrev:
+    
+    and.b   #$70, d0                    ; Advance cursor?
+    beq.s   @NoAdvance
+    moveq   #SFX_LONGBEEP, d7
+    jsr     (PlaySFX).w
+    addq.b  #1, d2
+@NoAdvance:
+    
+    ror.l   d4, d3                      ; Store modified name
+    move.l  d3, (a6)
+    
+@Done:
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawHiscoreTable
+; Draws all high scores.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawHiscores:
+    lea     (HiscoreTable), a0          ; Go through all scores
+    moveq   #10-1, d0
+    moveq   #5, d1
+@Loop:
+    move.l  (a0)+, d2
+    bsr.s   @DoIt
+    addq.w  #2, d1
+    dbf     d0, @Loop
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    lea     -9*4*2(sp), sp              ; Allocate buffer
+    lea     (sp), a6
+    lea     9*4(sp), a5
+    
+    moveq   #8-1, d7                    ; Skip trailing zeroes
+    moveq   #0, d5
+@ZeroLoop:
+    rol.l   #4, d2
+    move.w  d2, d6
+    and.w   #$0F, d6
+    bne.s   @ZeroEnd
+    move.l  d5, (a6)+
+    move.l  d5, (a5)+
+    dbf     d7, @ZeroLoop
+@ZeroEnd:
+    
+    tst.w   d7                          ; Draw remaining digits
+    bmi.s   @DigitEnd
+@DigitLoop:
+    move.w  d2, d6
+    and.w   #$0F, d6
+    lsl.w   #2, d6
+    add.w   #$8000+VramHiNumbers, d6
+    move.w  d6, (a6)+
+    addq.w  #1, d6
+    move.w  d6, (a5)+
+    addq.w  #1, d6
+    move.w  d6, (a6)+
+    addq.w  #1, d6
+    move.w  d6, (a5)+
+    rol.l   #4, d2
+    dbf     d7, @DigitLoop
+@DigitEnd:
+    
+    move.w  #$8000+VramHiNumbers, (a6)+ ; Draw final zero
+    move.w  #$8001+VramHiNumbers, (a5)+
+    move.w  #$8002+VramHiNumbers, (a6)+
+    move.w  #$8003+VramHiNumbers, (a5)+
+    
+    moveq   #0, d3                      ; Generate VDP address command
+    move.w  d1, d3
+    lsl.w   #7, d3
+    add.w   #14*2, d3
+    swap    d3
+    or.l    #$40000003, d3
+    
+    lea     ($C00000), a6               ; Draw top half of line
+    move.l  d3, 4(a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    
+    add.l   #$80<<16, d3                ; Draw bottom half of line
+    move.l  d3, 4(a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    
+    rts                                 ; End of subsubroutine
+
+;****************************************************************************
+; DrawHiscoreNames
+; Draws all high score names.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawHiscoreNames:
+    lea     (HiscoreNames), a0          ; Go through all names
+    moveq   #10-1, d0
+    moveq   #5, d1
+@Loop:
+    move.l  (a0)+, d2
+    moveq   #9, d7
+    sub.w   d0, d7
+    cmp.b   (Rank1P), d7
+    beq.s   @SkipEntry
+    cmp.b   (Rank2P), d7
+    beq.s   @SkipEntry
+    bsr.s   @DoIt
+@SkipEntry:
+    addq.w  #2, d1
+    dbf     d0, @Loop
+    
+    rts                                 ; End of subroutine
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    lea     -3*4*2(sp), sp              ; Allocate buffer
+    lea     (sp), a6
+    lea     3*4(sp), a5
+    
+    moveq   #3-1, d7                    ; Draw all letters
+@LetterLoop:
+    rol.l   #8, d2
+    moveq   #0, d6
+    move.b  d2, d6
+    lsl.w   #2, d6
+    add.w   #$8000+VramHiLetters, d6
+    move.w  d6, (a6)+
+    addq.w  #1, d6
+    move.w  d6, (a5)+
+    addq.w  #1, d6
+    move.w  d6, (a6)+
+    addq.w  #1, d6
+    move.w  d6, (a5)+
+    dbf     d7, @LetterLoop
+    
+    moveq   #0, d3                      ; Generate VDP address command
+    move.w  d1, d3
+    lsl.w   #7, d3
+    add.w   #8*2, d3
+    swap    d3
+    or.l    #$40000003, d3
+    
+    lea     ($C00000), a6               ; Draw top half of line
+    move.l  d3, 4(a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    
+    add.l   #$80<<16, d3                ; Draw bottom half of line
+    move.l  d3, 4(a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    move.l  (sp)+, (a6)
+    
+    rts                                 ; End of subsubroutine
+
+;****************************************************************************
+; DrawEntryNames
+; Draws the names being entered in the high score table.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawEntryNames:
+    moveq   #0, d7
+    bsr.s   @DoIt
+    moveq   #1, d7
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.w  #8*8, d0                    ; Determine initial position
+    moveq   #0, d1
+    lea     (Rank1P), a6
+    move.b  (a6,d7.w), d1
+    bmi.s   @NoRank
+    lsl.w   #4, d1
+    add.w   #5*8, d1
+    
+    move.w  #$C000>>2, d2               ; Determine palette to use
+    tst.w   d7
+    beq.s   @Pal1P
+    move.w  #$E000>>2, d2
+@Pal1P:
+    
+    lea     (EntryPos1P), a5            ; Determine which letter to blink
+    move.b  #2, d3
+    sub.b   (a5,d7.w), d3
+    
+    move.b  (a6,d7.w), d7               ; Get entered name
+    lsl.w   #2, d7
+    lea     (HiscoreNames), a6
+    move.l  (a6,d7.w), d4
+    
+    
+    moveq   #3-1, d5                    ; Draw all letters
+    swap    d3
+    move.w  #%0101, d3
+    swap    d3
+@Loop:
+    rol.l   #8, d4
+    cmp.b   d3, d5
+    bne.s   @NoBlink
+    btst.b  #2, (Anim+1)
+    bne.s   @Blink
+@NoBlink:
+    move.w  d2, -(sp)
+    move.b  d4, d2
+    lsl.w   #2, d2
+    add.w   #VramHiLetters, d2
+    swap    d3
+    jsr     (AddSprite).w
+    swap    d3
+    move.w  (sp)+, d2
+@Blink:
+    add.w   #$10, d0
+    dbf     d5, @Loop
+    
+@NoRank:
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; ResetHiscores
+; Resets the high score table
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+ResetHiscores:
+    lea     (DefaultHiscore), a6        ; Set initial scores
+    lea     (HiscoreTable), a5
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    
+    move.l  #$01010100, d7              ; Set initial names
+    lea     (HiscoreNames), a6
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; ResetEasyHiscores
+; Resets the high score table with easy high scores
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+ResetEasyHiscores:
+    lea     (DefaultEasyHiscore), a6    ; Set initial scores
+    lea     (HiscoreTable), a5
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    move.l  (a6)+, (a5)+
+    
+    move.l  #$18191A00, d7              ; Set initial names
+    lea     (HiscoreNames), a6
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    move.l  d7, (a6)+
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; FindRank
+; Figure out what rank a new score would get.
+;----------------------------------------------------------------------------
+; input d7.l .... Score
+;----------------------------------------------------------------------------
+; output d7.w ... Rank (-1 if wouldn't make it)
+;----------------------------------------------------------------------------
+; breaks: d5-d6, a4-a6
+;****************************************************************************
+
+FindRank:
+    lea     (HiscoreTable), a6          ; Find what rank it'd get
+    moveq   #10-1, d6
+@Loop:
+    move.l  (a6)+, d5
+    cmp.l   d5, d7
+    bhs.s   @Found
+    dbf     d6, @Loop
+    
+    moveq   #-1, d7                     ; Didn't make it...
+    rts                                 ; End of subroutine
+
+@Found:
+    neg.w   d6                          ; Calculate rank
+    add.w   #9, d6
+    move.w  d6, d7
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; InsertHiscore
+; Inserts a new high score into the table.
+;----------------------------------------------------------------------------
+; input d7.l ... Score
+; input d6.w ... Rank
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4-a6
+;****************************************************************************
+
+InsertHiscore:
+    lea     (4*9+HiscoreTable), a6      ; End of score list
+    lea     (4*9+HiscoreNames), a5      ; End of names list
+    
+    sub.w   #9, d6                      ; How many entries to push down?
+    beq.s   @Last
+    neg.w   d6
+    
+    subq.w  #1, d6                      ; Push down all following entries
+@PushDown:
+    move.l  -4(a6), (a6)
+    move.l  -4(a5), (a5)
+    subq.w  #4, a6
+    subq.w  #4, a5
+    dbf     d6, @PushDown
+    
+@Last:
+    move.l  d7, (a6)                    ; Insert new score
+    move.l  #$01010100, (a5)            ; "AAA" as default name
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; LoadHiscores
+; Loads the high score table from SRAM, if available.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+LoadHiscores:
+    move.b  #$03, ($A130F1)             ; Enable SRAM
+    
+    lea     ($200003), a0               ; Try first bank
+    movep.l 0(a0), d7
+    cmp.l   #'GAXE', d7
+    beq.s   @DoIt
+    
+    lea     ($200103), a0               ; Try second bank
+    movep.l 0(a0), d7
+    cmp.l   #'GAXE', d7
+    beq.s   @DoIt
+    
+    move.b  #$00, ($A130F1)             ; Disable SRAM
+    bra     ResetHiscores               ; Load default table
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    addq.w  #8, a0                      ; Skip header
+    moveq   #0, d0                      ; Initialize checksum
+    
+    lea     (HiscoreTable), a6          ; Load scores
+    moveq   #10-1, d6
+@ScoreLoop:
+    movep.l 0(a0), d7
+    add.l   d7, d0
+    move.l  d7, (a6)+
+    addq.w  #8, a0
+    dbf     d6, @ScoreLoop
+    
+    lea     (HiscoreNames), a6          ; Load names
+    moveq   #10-1, d6
+@NameLoop:
+    movep.l 0(a0), d7
+    add.l   d7, d0
+    move.l  d7, (a6)+
+    addq.w  #8, a0
+    dbf     d6, @NameLoop
+    
+    movep.l 0(a0), d1                   ; Verify checksum
+    cmp.l   d1, d0
+    beq.s   @ChecksumOK
+    bsr     ResetHiscores
+    bra     SaveHiscores
+@ChecksumOK:
+    
+    move.b  #$00, ($A130F1)             ; Disable SRAM
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; SaveHiscores
+; Saves the high score table into SRAM, if available.
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+SaveHiscores:
+    move.b  #$03, ($A130F1)             ; Enable SRAM
+    
+    lea     ($200003), a0               ; Try first bank
+    lea     ($200103), a1
+    movep.l 0(a0), d7
+    cmp.l   #'GAXE', d7
+    bne.s   @DoIt
+    
+    lea     ($200103), a0               ; Use second bank
+    lea     ($200003), a1
+
+;----------------------------------------------------------------------------
+
+@DoIt:
+    move.l  #'XEMA', d7                 ; Write invalid header
+    movep.l d7, 0(a0)
+    
+    moveq   #0, d0                      ; Initialize checksum
+    
+    lea     8(a0), a2                   ; Save scores
+    lea     (HiscoreTable), a6
+    moveq   #10-1, d6
+@ScoreLoop:
+    move.l  (a6)+, d7
+    add.l   d7, d0
+    movep.l d7, 0(a2)
+    addq.w  #8, a2
+    dbf     d6, @ScoreLoop
+    
+    lea     (HiscoreNames), a6          ; Save names
+    moveq   #10-1, d6
+@NameLoop:
+    move.l  (a6)+, d7
+    add.l   d7, d0
+    movep.l d7, 0(a2)
+    addq.w  #8, a2
+    dbf     d6, @NameLoop
+    
+    movep.l d0, 0(a2)                   ; Save checksum
+    
+    move.l  #'GAXE', d7                 ; Update headers
+    move.l  #'XEMA', d6
+    movep.l d7, 0(a0)
+    movep.l d6, 0(a1)
+    
+    move.b  #$00, ($A130F1)             ; Disable SRAM
+    rts                                 ; End of subroutine

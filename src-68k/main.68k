@@ -1,0 +1,79 @@
+;****************************************************************************
+; EntryPoint
+; Where the program starts.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+EntryPoint:
+    move.w  #$2700, sr                  ; Disable IRQs
+    
+    move.b  ($A10001), d7               ; Disable TMSS
+    and.b   #$0F, d7
+    beq.s   @NoTMSS
+    move.l  #'SEGA', ($A14000)
+@NoTMSS:
+    
+    jsr     (InitRand).w                ; Initialize hardware
+    jsr     (InitJoypad).w
+    jsr     (InitSound).w
+    jsr     (InitVideo).w
+    
+    bsr     (LoadHiscores)              ; Set up high scores
+    bsr     (SaveHiscores)
+    
+    move.b  #1, (NumPlayers)            ; Default number of players
+    clr.b   (CurrMap)                   ; Default map
+    
+    bra     TitleScreen                 ; Start playing
+
+;****************************************************************************
+; NextFrame
+; Waits until the next frame starts and updates the system status.
+;----------------------------------------------------------------------------
+; breaks: d5-d7, a4-a6
+;****************************************************************************
+
+NextFrame:
+    jsr     (UpdateSprites).w           ; Do system stuff
+    jsr     (UpdatePalettes).w
+    jsr     (VSync).w
+    jsr     (FlushDMABuf).w
+    jsr     (EnableDisplay).w
+    jsr     (UpdateJoypad).w
+    jsr     (UpdateSound).w
+    
+    move.w  (Anim), d7                  ; Update global animation
+    addq.w  #1, d7
+    move.w  d7, (Anim)
+    
+    moveq   #0, d6                      ; Update subpixel offset
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    roxl.b  #1, d7
+    roxr.b  #1, d6
+    move.w  d6, (Subpixel)
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; ErrorInt
+; Interrupt handler for when the program crashes.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+ErrorInt:
+    bra.s   *

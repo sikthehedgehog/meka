@@ -1,0 +1,187 @@
+;****************************************************************************
+; GameOver
+; Game over sequence.
+;----------------------------------------------------------------------------
+; notes: doesn't return
+;****************************************************************************
+
+GameOver:
+    clr.b   (Joy1Press)                 ; Reset joypad presses
+    clr.b   (Joy2Press)
+    
+    clr.w   (Anim)                      ; We use this for timing
+    move.w  #$50, (GameOverPos)         ; For the animation
+    
+    moveq   #BGM_GAMEOVER, d7           ; Change music
+    jsr     (PlayBGM).w
+
+;----------------------------------------------------------------------------
+
+@MainLoop:
+    move.b  (Joy1Press), d7             ; Press Start to quit
+    or.b    (Joy2Press), d7
+    btst.l  #7, d7
+    bne.s   @Quit
+    cmpi.w  #300, (Anim)                ; Or just wait a while
+    beq.s   @Quit
+    
+    cmpi.w  #$10, (GameOverPos)         ; Do "GAME OVER" animation
+    beq.s   @NoShrink
+    subq.w  #2, (GameOverPos)
+@NoShrink:
+    
+    jsr     (ClearSprites).w            ; Draw all text
+    bsr     DrawGameOver
+    moveq   #0, d4
+    move.w  #$60, d1
+    bsr     DrawFinalScore
+    moveq   #1, d4
+    move.w  #$90, d1
+    bsr     DrawFinalScore
+    
+    jsr     (NextFrame).w               ; Wait for next frame
+    bra     @MainLoop
+
+;----------------------------------------------------------------------------
+
+@Quit:
+    move.l  (Score1P), d0               ; Retrieve scores
+    move.l  (Score2P), d1
+    
+    move.l  d0, d7                      ; Find at which ranks each player
+    bsr     FindRank                      ; placed, if any
+    move.w  d7, d2
+    move.l  d1, d7
+    bsr     FindRank
+    move.w  d7, d3
+    
+    tst.w   d2                          ; Player 1 got a high score?
+    bmi.s   @No1PHiscore
+    move.l  d0, d7
+    move.w  d2, d6
+    bsr     InsertHiscore
+    cmp.w   d2, d3
+    blo.s   @No1PHiscore
+    tst.w   d3
+    bmi.s   @No1PHiscore
+    addq.w  #1, d3
+    cmp.w   #10, d3
+    bne.s   @No1PHiscore
+    moveq   #-1, d3
+@No1PHiscore:
+    
+    tst.w   d3                          ; Player 2 got a high score?
+    bmi.s   @No2PHiscore
+    move.l  d1, d7
+    move.w  d3, d6
+    bsr     InsertHiscore
+    cmp.w   d3, d2
+    blo.s   @No2PHiscore
+    tst.w   d2
+    bmi.s   @No2PHiscore
+    addq.w  #1, d2
+    cmp.w   #10, d2
+    bne.s   @No2PHiscore
+    moveq   #-1, d2
+@No2PHiscore:
+    
+    jsr     (DisableDisplay).w          ; Go enter the names
+    move.l  ($0000).w, sp
+    bra     NameEntry
+
+;****************************************************************************
+; DrawGameOver
+; Draws "GAME OVER".
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawGameOver:
+    move.w  (GameOverPos), d5           ; Get distance of letters
+    move.w  d5, a0
+    
+    move.w  #$E000+VramGameOver, d2     ; Draw all letters
+    moveq   #$40, d1
+    moveq   #%0101, d3
+    moveq   #4-1, d4
+@Loop:
+    move.w  #$98, d0
+    add.w   d5, d0
+    jsr     (AddSprite).w
+    addq.w  #4, d2
+    move.w  #$98, d0
+    sub.w   d5, d0
+    jsr     (AddSprite).w
+    addq.w  #4, d2
+    add.w   a0, d5
+    dbf     d4, @Loop
+    
+    rts                                 ; End of subroutine
+
+;****************************************************************************
+; DrawFinalScore
+; Draws the final score of a player.
+;----------------------------------------------------------------------------
+; input d4.w ... Which player
+; input d1.w ... Y coordinate
+;----------------------------------------------------------------------------
+; breaks: all
+;****************************************************************************
+
+DrawFinalScore:
+    tst.w   d4                          ; Show 2P score only in 2P mode
+    beq.s   @PlayerOK
+    cmpi.b  #2, (NumPlayers)
+    beq.s   @PlayerOK
+    rts
+@PlayerOK:
+    
+    move.w  #$58, d0                    ; Draw "PLAYER"
+    move.w  #$E000+VramPlayerText, d2
+    moveq   #%1101, d3
+    jsr     (AddSprite).w
+    add.w   #$20, d0
+    addq.w  #8, d2
+    jsr     (AddSprite).w
+    add.w   #$20, d0
+    addq.w  #8, d2
+    jsr     (AddSprite).w
+    
+    move.w  #$C8, d0                    ; Draw player number
+    move.w  d4, d2
+    addq.w  #1, d2
+    lsl.w   #2, d2
+    add.w   #$E000+VramNumbers, d2
+    moveq   #%0101, d3
+    jsr     (AddSprite).w
+    
+    lsl.w   #2, d4                      ; Get score
+    lea     (Score1P), a6
+    move.l  (a6,d4.w), d4
+    
+    move.w  #$58, d0                    ; Skip leading zeroes
+    moveq   #8-1, d5
+@ZeroLoop:
+    rol.l   #4, d4
+    move.w  d4, d2
+    and.w   #$0F, d2
+    bne.s   @ZeroEnd
+    add.w   #$10, d0
+    dbf     d5, @ZeroLoop
+@ZeroEnd:
+    
+    add.w   #$10, d1                    ; Draw all digits
+@DigitLoop:
+    move.w  d4, d2
+    and.w   #$0F, d2
+    lsl.w   #2, d2
+    add.w   #$E000+VramNumbers, d2
+    jsr     (AddSprite).w
+    rol.l   #4, d4
+    add.w   #$10, d0
+    dbf     d5, @DigitLoop
+    
+    move.w  #$E000+VramNumbers, d2      ; Draw trailing zero
+    jsr     (AddSprite).w
+    
+    rts                                 ; End of subroutine

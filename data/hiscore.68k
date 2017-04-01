@@ -1,0 +1,51 @@
+;****************************************************************************
+; GfxHiscore
+; Most graphics used in the high score table.
+;****************************************************************************
+
+GfxHiscore:
+    incbin  "data/hiscore/hiscore.slz"
+    even
+
+;****************************************************************************
+; GfxHiscoreBG
+; Graphics and mappings for the high score table background.
+;****************************************************************************
+
+GfxHiscoreBG:
+    incbin  "data/hiscore/background.slz"
+    even
+
+;****************************************************************************
+; DefaultHiscore
+; Default high scores.
+;****************************************************************************
+
+DefaultHiscore:
+    dc.l    $1000
+    dc.l    $950
+    dc.l    $900
+    dc.l    $850
+    dc.l    $800
+    dc.l    $750
+    dc.l    $700
+    dc.l    $650
+    dc.l    $600
+    dc.l    $550
+
+;****************************************************************************
+; DefaultEasyHiscore
+; Default easy high scores.
+;****************************************************************************
+
+DefaultEasyHiscore:
+    dc.l    $500
+    dc.l    $450
+    dc.l    $400
+    dc.l    $350
+    dc.l    $300
+    dc.l    $250
+    dc.l    $200
+    dc.l    $150
+    dc.l    $100
+    dc.l    $50
